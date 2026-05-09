@@ -1,5 +1,9 @@
 import axios from "axios";
 
+/** Production Railway API host (browser uses this when NEXT_PUBLIC_* is unset at build time). */
+const DEFAULT_PRODUCTION_ORIGIN =
+  "https://founder-os-backend-production-48a7.up.railway.app";
+
 /** Backend mounts routes under `app.use("/api/v1", apiRouter)`. */
 function normalizeApiBaseUrl(raw: string | undefined): string {
   const trimmed = raw?.trim().replace(/\/+$/, "") ?? "";
@@ -9,13 +13,15 @@ function normalizeApiBaseUrl(raw: string | undefined): string {
 
 const envBase =
   normalizeApiBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL) ||
-  (process.env.NODE_ENV === "development" ? "http://localhost:5000/api/v1" : "");
+  (process.env.NODE_ENV === "development"
+    ? "http://localhost:5000/api/v1"
+    : normalizeApiBaseUrl(DEFAULT_PRODUCTION_ORIGIN));
 
 const baseURL = envBase;
 
 if (!baseURL && typeof window !== "undefined") {
   console.warn(
-    "[api-client] NEXT_PUBLIC_API_BASE_URL is unset — API calls may fail. Set full origin (Railway hostname is OK; `/api/v1` is appended if missing)."
+    "[api-client] API base URL is empty — set NEXT_PUBLIC_API_BASE_URL at build time, or rely on defaults."
   );
 }
 

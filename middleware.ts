@@ -1,3 +1,4 @@
+import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 /**
@@ -6,7 +7,10 @@ import { NextResponse } from "next/server";
  * block `/dashboard` after a successful cross-origin login. Session is enforced in the client:
  * `AuthProvider` (GET /auth/me) and `(protected)/layout.tsx`.
  */
-export function middleware() {
+export function middleware(request: NextRequest) {
+  if (request.nextUrl.pathname === "/favicon.ico") {
+    return NextResponse.rewrite(new URL("/icon", request.url));
+  }
   return NextResponse.next();
 }
 
@@ -30,6 +34,7 @@ export const config = {
     "/activity-log",
     "/activity-log/:path*",
     "/login",
-    "/signup"
+    "/signup",
+    "/favicon.ico"
   ]
 };

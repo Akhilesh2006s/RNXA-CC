@@ -5,9 +5,12 @@ import { Toaster } from "sonner";
 
 /** Tracks `html.dark` toggled by ThemeScript / user preference. */
 export function AppToaster() {
+  /** Avoid SSR/client hydration mismatch with Sonner. */
+  const [mounted, setMounted] = useState(false);
   const [theme, setTheme] = useState<"light" | "dark">("dark");
 
   useEffect(() => {
+    setMounted(true);
     function read() {
       setTheme(document.documentElement.classList.contains("dark") ? "dark" : "light");
     }
@@ -16,6 +19,8 @@ export function AppToaster() {
     mo.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
     return () => mo.disconnect();
   }, []);
+
+  if (!mounted) return null;
 
   return (
     <Toaster
