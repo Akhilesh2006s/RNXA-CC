@@ -41,6 +41,12 @@ const PIPELINE = [
   "Lost"
 ] as const;
 
+function leadCanManualConvert(lead: Lead) {
+  if (lead.convertedClientId) return false;
+  if (lead.stage === "Lost") return false;
+  return true;
+}
+
 export default function SalesPage() {
   const queryClient = useQueryClient();
   const [company, setCompany] = useState("");
@@ -49,6 +55,7 @@ export default function SalesPage() {
   const [estimatedDealValue, setEstimatedDealValue] = useState("");
   const [lostReasonDraft, setLostReasonDraft] = useState("");
   const [leadPendingDelete, setLeadPendingDelete] = useState<string | null>(null);
+  const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(() => new Set());
 
   const leadsQuery = useQuery({
     queryKey: ["sales", "leads"],
@@ -126,10 +133,32 @@ export default function SalesPage() {
   });
 
   const convertMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await apiClient.post(`/sales/leads/${id}/convert`);
+    mutationFn: async (payload: { id: string; force?: boolean }) => {
+      await apiClient.post(`/sales/leads/${payload.id}/convert`, {
+        force: Boolean(payload.force)
+      });
     },
     onSuccess: () => void invalidate()
+  });
+
+  const bulkConvertMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const results = await Promise.allSettled(
+        ids.map((id) => apiClient.post(`/sales/leads/${id}/convert`, { force: true }))
+      );
+      const failed = results.filter((r) => r.status === "rejected").length;
+      return { ok: ids.length - failed, failed };
+    },
+    onSuccess: (res) => {
+      setSelectedLeadIds(new Set());
+      void invalidate();
+      if (res.failed === 0) {
+        appToast.success(`${res.ok} lead(s) moved to Clients`);
+      } else {
+        appToast.success(`${res.ok} converted · ${res.failed} failed (e.g. lost or already converted)`);
+      }
+    },
+    onError: (err) => toastApiError(err, "Bulk convert failed")
   });
 
   const deleteMutation = useMutation({
@@ -165,10 +194,35 @@ export default function SalesPage() {
     }));
   }, [leadsQuery.data]);
 
+  const selectableLeadIds = useMemo(() => {
+    const ids: string[] = [];
+    for (const l of leadsQuery.data ?? []) {
+      if (leadCanManualConvert(l)) ids.push(l._id);
+    }
+    return ids;
+  }, [leadsQuery.data]);
+
+  function toggleLeadSelection(leadId: string) {
+    setSelectedLeadIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(leadId)) next.delete(leadId);
+      else next.add(leadId);
+      return next;
+    });
+  }
+
+  function selectAllConvertible() {
+    setSelectedLeadIds(new Set(selectableLeadIds));
+  }
+
+  function clearLeadSelection() {
+    setSelectedLeadIds(new Set());
+  }
+
   return (
     <PageShell
       title="Sales CRM"
-      description="Pipeline stages, conversion, lost reasons, leaderboard, and client conversion."
+      description="Pipeline, analytics, manual bulk convert to Clients, and Negotiation workflow."
     >
       {analyticsQuery.data && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
@@ -243,6 +297,45 @@ export default function SalesPage() {
         </div>
       )}
 
+      <div className="rounded-xl border border-gold/30 bg-surface-card p-4 space-y-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium text-ink-secondary">Manual push to Clients</p>
+            <p className="text-xs text-muted mt-1 max-w-xl">
+              Select any open lead (except Lost), then convert without waiting on Negotiation. Negotiation still
+              supports one-click convert. Selection clears after a successful run.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted">{selectedLeadIds.size} selected</span>
+            <button
+              type="button"
+              className="rounded-lg border border-gold/30 px-3 py-1.5 text-xs text-ink-secondary hover:bg-surface-lift disabled:opacity-50"
+              disabled={!selectableLeadIds.length}
+              onClick={selectAllConvertible}
+            >
+              Select all eligible
+            </button>
+            <button
+              type="button"
+              className="rounded-lg border border-gold/30 px-3 py-1.5 text-xs text-ink-secondary hover:bg-surface-lift disabled:opacity-50"
+              disabled={!selectedLeadIds.size}
+              onClick={clearLeadSelection}
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              className="rounded-lg bg-gold-cta font-semibold shadow-gold hover:brightness-110 px-4 py-2 text-xs text-black disabled:opacity-50"
+              disabled={!selectedLeadIds.size || bulkConvertMutation.isPending}
+              onClick={() => bulkConvertMutation.mutate([...selectedLeadIds])}
+            >
+              {bulkConvertMutation.isPending ? "Converting…" : `Convert selected (${selectedLeadIds.size})`}
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div className="rounded-xl border border-gold/20 bg-surface-card p-4 space-y-3">
         <p className="text-sm font-medium text-ink-secondary">Create lead</p>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
@@ -309,12 +402,25 @@ export default function SalesPage() {
                 <div className="space-y-2">
                 {column.leads.map((lead) => (
                   <div key={lead._id} className="rounded-lg border border-gold/20 bg-surface-card p-3 space-y-2">
-                    <div>
-                      <p className="text-sm font-medium">{lead.company}</p>
-                      <p className="text-xs text-muted">{lead.contactPerson}</p>
-                      {lead.estimatedDealValue != null && (
-                        <p className="text-xs text-gold-bright mt-1">{formatInr(lead.estimatedDealValue)}</p>
-                      )}
+                    <div className="flex gap-2 justify-between items-start">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium">{lead.company}</p>
+                        <p className="text-xs text-muted">{lead.contactPerson}</p>
+                        {lead.estimatedDealValue != null && (
+                          <p className="text-xs text-gold-bright mt-1">{formatInr(lead.estimatedDealValue)}</p>
+                        )}
+                      </div>
+                      {leadCanManualConvert(lead) ? (
+                        <label className="flex shrink-0 items-center gap-1.5 text-[10px] text-muted cursor-pointer">
+                          <input
+                            type="checkbox"
+                            className="h-3.5 w-3.5 accent-gold rounded border-gold/40"
+                            checked={selectedLeadIds.has(lead._id)}
+                            onChange={() => toggleLeadSelection(lead._id)}
+                          />
+                          Sel.
+                        </label>
+                      ) : null}
                     </div>
                     <div className="flex flex-col gap-1">
                       <label className="text-[11px] text-muted">Move stage</label>
@@ -347,7 +453,7 @@ export default function SalesPage() {
                         <button
                           type="button"
                           className="rounded bg-gold px-2 py-1 text-[11px] font-medium text-black hover:brightness-110 mt-1"
-                          onClick={() => convertMutation.mutate(lead._id)}
+                          onClick={() => convertMutation.mutate({ id: lead._id })}
                         >
                           Convert to client
                         </button>
@@ -391,7 +497,25 @@ export default function SalesPage() {
           </p>
         ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-          {columns.map(({ stage, leads: stageLeads }) => (
+          {columns.map(({ stage, leads: stageLeads }) => {
+            const convertibleInStage = stageLeads.filter(leadCanManualConvert);
+            const stageAllSelected =
+              convertibleInStage.length > 0 &&
+              convertibleInStage.every((l) => selectedLeadIds.has(l._id));
+
+            function toggleStageSelect() {
+              setSelectedLeadIds((prev) => {
+                const next = new Set(prev);
+                if (stageAllSelected) {
+                  convertibleInStage.forEach((l) => next.delete(l._id));
+                } else {
+                  convertibleInStage.forEach((l) => next.add(l._id));
+                }
+                return next;
+              });
+            }
+
+            return (
             <div
               key={stage}
               className="rounded-xl border border-gold/20 bg-surface-card overflow-x-auto"
@@ -401,13 +525,24 @@ export default function SalesPage() {
                 <p className="text-xs text-muted">
                   {stageLeads.length === 0
                     ? "No leads in this stage."
-                    : `${stageLeads.length} ${stageLeads.length === 1 ? "lead" : "leads"} · move stages or convert from Negotiation.`}
+                    : `${stageLeads.length} ${stageLeads.length === 1 ? "lead" : "leads"} · use checkboxes + Manual push, or convert from Negotiation.`}
                 </p>
               </div>
               {stageLeads.length ? (
-                <table className="w-full text-sm min-w-[320px]">
+                <table className="w-full text-sm min-w-[360px]">
                   <thead>
                     <tr className="text-left border-b border-gold/20 text-muted">
+                      <th className="p-3 w-10">
+                        {convertibleInStage.length ? (
+                          <input
+                            type="checkbox"
+                            className="h-3.5 w-3.5 accent-gold rounded border-gold/40"
+                            title="Select all eligible in this stage"
+                            checked={stageAllSelected}
+                            onChange={toggleStageSelect}
+                          />
+                        ) : null}
+                      </th>
                       <th className="p-3">Company</th>
                       <th className="p-3">Contact</th>
                       <th className="p-3 text-right">Deal value</th>
@@ -418,6 +553,19 @@ export default function SalesPage() {
                   <tbody>
                     {stageLeads.map((lead) => (
                       <tr key={lead._id} className="border-b border-gold/20 hover:bg-surface">
+                        <td className="p-3 align-middle">
+                          {leadCanManualConvert(lead) ? (
+                            <input
+                              type="checkbox"
+                              className="h-3.5 w-3.5 accent-gold rounded border-gold/40"
+                              checked={selectedLeadIds.has(lead._id)}
+                              onChange={() => toggleLeadSelection(lead._id)}
+                              aria-label={`Select ${lead.company}`}
+                            />
+                          ) : (
+                            <span className="text-[10px] text-muted/60">—</span>
+                          )}
+                        </td>
                         <td className="p-3 font-medium">{lead.company}</td>
                         <td className="p-3 text-muted">{lead.contactPerson}</td>
                         <td className="p-3 text-right">
@@ -442,7 +590,7 @@ export default function SalesPage() {
                               <button
                                 type="button"
                                 className="rounded-lg bg-gold-cta px-2.5 py-1 text-xs font-semibold shadow-gold hover:brightness-110"
-                                onClick={() => convertMutation.mutate(lead._id)}
+                                onClick={() => convertMutation.mutate({ id: lead._id })}
                                 disabled={convertMutation.isPending}
                               >
                                 Convert
@@ -468,7 +616,8 @@ export default function SalesPage() {
                 </p>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
         )}
 
@@ -508,7 +657,7 @@ export default function SalesPage() {
         </table>
         {!clientsQuery.data?.length && (
           <p className="p-8 text-center text-sm text-muted">
-            No clients yet · convert a lead from Negotiation.
+            No clients yet · convert from Negotiation or use Manual push to Clients above.
           </p>
         )}
       </div>
