@@ -25,7 +25,20 @@ export async function login(payload: { email: string; password: string }) {
 }
 
 export async function logout() {
-  await apiClient.post("/auth/logout");
+  try {
+    await apiClient.post("/auth/logout");
+  } catch {
+    // Still clear client session if API fails (network / CORS / expired cookie)
+  }
+}
+
+/** Clears React Query auth cache so UI treats user as signed out immediately. */
+export function clearAuthSession(queryClient: {
+  setQueryData: (key: readonly string[], data: null) => void;
+  removeQueries: (opts: { queryKey: readonly string[] }) => void;
+}) {
+  queryClient.setQueryData(["auth", "me"], null);
+  queryClient.removeQueries({ queryKey: ["auth"] });
 }
 
 export async function getMe() {

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/features/auth/AuthProvider";
-import { logout } from "@/features/auth/auth-api";
+import { clearAuthSession, logout } from "@/features/auth/auth-api";
 import { NotificationBell } from "@/features/notifications/NotificationBell";
 import { ThemeToggle } from "@/features/theme/ThemeToggle";
 
@@ -102,10 +102,11 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
           })}
         </nav>
         <button
+          type="button"
           onClick={async () => {
             await logout();
-            queryClient.removeQueries({ queryKey: ["auth", "me"] });
-            router.push("/login");
+            clearAuthSession(queryClient);
+            router.replace("/login");
           }}
           className="mt-4 w-full shrink-0 rounded-lg border border-gold/25 px-3 py-2 text-sm text-muted hover:bg-surface-input/80 dark:hover:bg-surface-lift hover:text-gold-bright"
         >
