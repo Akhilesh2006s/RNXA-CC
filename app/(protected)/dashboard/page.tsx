@@ -157,11 +157,12 @@ export default function DashboardPage() {
       </section>
 
       <section className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <div className="rounded-xl border border-gold/20 bg-surface-card p-4 h-[320px]">
-          <p className="text-sm text-muted mb-2">Expense vs lead volume</p>
+        <div className="flex h-[320px] flex-col rounded-xl border border-gold/20 bg-surface-card p-4">
+          <p className="mb-2 shrink-0 text-sm text-muted">Expense vs lead volume</p>
           {chartsQuery.isLoading ? (
             <p className="text-xs text-muted">Loading charts…</p>
           ) : (
+            <div className="min-h-[220px] min-w-0 flex-1">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={comboBars}>
                 <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
@@ -173,14 +174,16 @@ export default function DashboardPage() {
                 <Bar dataKey="leads" name="Leads" fill="#e8cf6a" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
+            </div>
           )}
         </div>
 
-        <div className="rounded-xl border border-gold/20 bg-surface-card p-4 h-[320px]">
-          <p className="text-sm text-muted mb-2">Tasks by status</p>
+        <div className="flex h-[320px] flex-col rounded-xl border border-gold/20 bg-surface-card p-4">
+          <p className="mb-2 shrink-0 text-sm text-muted">Tasks by status</p>
           {chartsQuery.isLoading ? (
             <p className="text-xs text-muted">Loading charts…</p>
           ) : (
+            <div className="min-h-[220px] min-w-0 flex-1">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie data={chartsQuery.data?.taskStatusBreakdown ?? []} dataKey="count" nameKey="status" cx="50%" cy="50%" outerRadius={100} label>
@@ -191,6 +194,7 @@ export default function DashboardPage() {
                 <Tooltip contentStyle={chartTooltipStyle} />
               </PieChart>
             </ResponsiveContainer>
+            </div>
           )}
         </div>
       </section>
