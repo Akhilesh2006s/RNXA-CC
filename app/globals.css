@@ -1,269 +1,145 @@
 @import "tailwindcss";
 
-@config "../tailwind.config.ts";
-
-
-
-/* Dark (default): black + gold accents */
-
+/* Dark: full RNXA navy (#2E2973 family) + neon green accents */
 html.dark {
-
   color-scheme: dark;
 
-  --color-surface: #020202;
+  --color-surface: #070d24;
+  --color-surface-card: #0c1538;
+  --color-surface-lift: #121f4d;
+  --color-surface-input: #1a2a5c;
+  --color-muted: #8a94b8;
+  --color-gold: #39ff14;
+  --color-gold-bright: #5aff3a;
+  --color-gold-dim: #2d9920;
+  --color-ink: #eef1fb;
+  --color-ink-secondary: #b8c2e8;
 
-  --color-surface-card: #0a0a0b;
+  --gradient-spot: transparent;
+  --gradient-base: #070d24;
 
-  --color-surface-lift: #131316;
+  --scrollbar-thumb-top: #5aff3a;
+  --scrollbar-thumb-mid: #39ff14;
+  --scrollbar-thumb-bot: #2dd412;
+  --scrollbar-thumb-hover-top: #7dff5c;
+  --scrollbar-thumb-hover-mid: #5aff3a;
+  --scrollbar-thumb-hover-bot: #39ff14;
+  --scrollbar-track: #0a1230;
+  --scrollbar-border: rgba(57, 255, 20, 0.12);
+  --scrollbar-thumb-border: #070d24;
+  --scrollbar-corner: #070d24;
 
-  --color-surface-input: #1a1812;
-
-  --color-muted: #9d968a;
-
-  --color-gold: #c9a227;
-
-  --color-gold-bright: #e8cf6a;
-
-  --color-gold-dim: #6b5f32;
-
-  --color-ink: #f5f2ea;
-
-  --color-ink-secondary: #e4e2dc;
-
-  --gradient-spot: rgba(201, 162, 39, 0.08);
-
-  --gradient-base: #020202;
-
-  --scrollbar-thumb-top: #e8cf6a;
-
-  --scrollbar-thumb-mid: #c9a227;
-
-  --scrollbar-thumb-bot: #a68b2e;
-
-  --scrollbar-thumb-hover-top: #f4e4a6;
-
-  --scrollbar-thumb-hover-mid: #e8cf6a;
-
-  --scrollbar-thumb-hover-bot: #c9a227;
-
-  --scrollbar-track: #070708;
-
-  --scrollbar-border: rgba(201, 162, 39, 0.12);
-
-  --scrollbar-thumb-border: #070708;
-
-  --scrollbar-corner: #020202;
-
-  --shadow-gold: 0 0 28px rgba(201, 162, 39, 0.15);
-
-  --gold-cta-from: #e8cf6a;
-
-  --gold-cta-to: #c9a227;
-
-  --gold-cta-text: #0a0a0a;
-
+  --shadow-gold: 0 0 28px rgba(57, 255, 20, 0.2);
+  --gold-cta-from: #5aff3a;
+  --gold-cta-to: #39ff14;
+  --gold-cta-text: #070d24;
 }
 
-
-
-/* Light: cream / warm ivory + espresso brown accents */
-
+/* Light: white + neon green accents, navy text */
 html:not(.dark) {
-
   color-scheme: light;
 
-  --color-surface: #f7f3ec;
+  --color-surface: #ffffff;
+  --color-surface-card: #ffffff;
+  --color-surface-lift: #f4f6ff;
+  --color-surface-input: #eef1fc;
+  --color-muted: #5c6494;
+  --color-gold: #2e2973;
+  --color-gold-bright: #32d611;
+  --color-gold-dim: #2a9920;
+  --color-ink: #2e2973;
+  --color-ink-secondary: #4a5080;
 
-  --color-surface-card: #fffcf7;
+  --gradient-spot: rgba(57, 255, 20, 0.08);
+  --gradient-base: #ffffff;
 
-  --color-surface-lift: #efe8dc;
+  --scrollbar-thumb-top: #5aff3a;
+  --scrollbar-thumb-mid: #39ff14;
+  --scrollbar-thumb-bot: #2dd412;
+  --scrollbar-thumb-hover-top: #7dff5c;
+  --scrollbar-thumb-hover-mid: #5aff3a;
+  --scrollbar-thumb-hover-bot: #32d611;
+  --scrollbar-track: #eef1fc;
+  --scrollbar-border: rgba(46, 41, 115, 0.12);
+  --scrollbar-thumb-border: #ffffff;
+  --scrollbar-corner: #ffffff;
 
-  --color-surface-input: #e8dfd2;
-
-  --color-muted: #7a6656;
-
-  --color-gold: #5c3d27;
-
-  --color-gold-bright: #4a3220;
-
-  --color-gold-dim: #8f704e;
-
-  --color-ink: #362a21;
-
-  --color-ink-secondary: #4d3f33;
-
-  --gradient-spot: rgba(92, 61, 39, 0.1);
-
-  --gradient-base: #f7f3ec;
-
-  --scrollbar-thumb-top: #a67c52;
-
-  --scrollbar-thumb-mid: #7a5638;
-
-  --scrollbar-thumb-bot: #5c3d27;
-
-  --scrollbar-thumb-hover-top: #bf9368;
-
-  --scrollbar-thumb-hover-mid: #8f6641;
-
-  --scrollbar-thumb-hover-bot: #6b4423;
-
-  --scrollbar-track: #ebe3d9;
-
-  --scrollbar-border: rgba(92, 61, 39, 0.18);
-
-  --scrollbar-thumb-border: #e0d6cb;
-
-  --scrollbar-corner: #f7f3ec;
-
-  --shadow-gold: 0 0 28px rgba(92, 61, 39, 0.12);
-
-  --gold-cta-from: #f2e4d2;
-
-  --gold-cta-to: #c9a56c;
-
-  --gold-cta-text: #241c16;
-
+  --shadow-gold: 0 0 28px rgba(57, 255, 20, 0.15);
+  --gold-cta-from: #5aff3a;
+  --gold-cta-to: #39ff14;
+  --gold-cta-text: #0e1240;
 }
-
-
 
 html,
-
 body {
-
   margin: 0;
-
   padding: 0;
-
-  background: radial-gradient(ellipse 120% 80% at 50% -20%, var(--gradient-spot), transparent 45%), var(--gradient-base);
-
+  min-height: 100%;
+  background: var(--gradient-base);
   color: var(--color-ink);
-
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-
 }
 
-
+html:not(.dark) body {
+  background: radial-gradient(ellipse 120% 80% at 50% -20%, var(--gradient-spot), transparent 45%), var(--gradient-base);
+}
 
 html.dark ::selection {
-
-  background: rgba(201, 162, 39, 0.35);
-
-  color: #0a0a0a;
-
+  background: rgba(57, 255, 20, 0.35);
+  color: #0e1240;
 }
-
-
 
 html:not(.dark) ::selection {
-
-  background: rgba(124, 90, 54, 0.28);
-
-  color: #1a1510;
-
+  background: rgba(57, 255, 20, 0.28);
+  color: #0e1240;
 }
-
-
 
 a {
-
   color: inherit;
-
   text-decoration: none;
-
 }
-
-
 
 * {
-
   scrollbar-width: thin;
-
   scrollbar-color: var(--scrollbar-thumb-mid) var(--scrollbar-track);
-
 }
-
-
 
 *::-webkit-scrollbar {
-
   width: 10px;
-
   height: 10px;
-
 }
-
-
 
 *::-webkit-scrollbar-track {
-
   background: var(--scrollbar-track);
-
   border-radius: 9999px;
-
   box-shadow: inset 0 0 0 1px var(--scrollbar-border);
-
 }
-
-
 
 *::-webkit-scrollbar-thumb {
-
   background: linear-gradient(
-
     180deg,
-
     var(--scrollbar-thumb-top) 0%,
-
     var(--scrollbar-thumb-mid) 55%,
-
     var(--scrollbar-thumb-bot) 100%
-
   );
-
   border-radius: 9999px;
-
   border: 2px solid var(--scrollbar-thumb-border);
-
 }
-
-
 
 *::-webkit-scrollbar-thumb:hover {
-
   background: linear-gradient(
-
     180deg,
-
     var(--scrollbar-thumb-hover-top) 0%,
-
     var(--scrollbar-thumb-hover-mid) 50%,
-
     var(--scrollbar-thumb-hover-bot) 100%
-
   );
-
 }
-
-
 
 *::-webkit-scrollbar-corner {
-
   background: var(--scrollbar-corner);
-
 }
-
-
-
-/* Primary action buttons: distinct gradient in dark vs light */
 
 .bg-gold-cta {
-
   background: linear-gradient(to bottom, var(--gold-cta-from), var(--gold-cta-to));
-
   color: var(--gold-cta-text);
-
 }
-
-

@@ -1,8 +1,7 @@
 import axios from "axios";
 
 /** Railway production API (used when env is missing and host is not local). */
-const DEFAULT_PRODUCTION_ORIGIN =
-  "https://founder-os-backend-production-48a7.up.railway.app";
+const DEFAULT_PRODUCTION_ORIGIN = "https://rnxa-cc-backend-production.up.railway.app";
 
 /** Backend mounts routes under `app.use("/api/v1", apiRouter)`. */
 function normalizeApiBaseUrl(raw: string | undefined): string {
@@ -17,16 +16,18 @@ function normalizeApiBaseUrl(raw: string | undefined): string {
  */
 function resolveBaseURL(): string {
   const explicit = normalizeApiBaseUrl(process.env.NEXT_PUBLIC_API_BASE_URL);
-  if (explicit) return explicit;
+  const useRemoteFromLocalhost = process.env.NEXT_PUBLIC_USE_REMOTE_API === "true";
 
   if (typeof window !== "undefined") {
     const h = window.location.hostname;
-    if (h === "localhost" || h === "127.0.0.1") {
+    if ((h === "localhost" || h === "127.0.0.1") && !useRemoteFromLocalhost) {
       return "http://localhost:5000/api/v1";
     }
+    if (explicit) return explicit;
     return normalizeApiBaseUrl(DEFAULT_PRODUCTION_ORIGIN);
   }
 
+  if (explicit) return explicit;
   return process.env.NODE_ENV === "development"
     ? "http://localhost:5000/api/v1"
     : normalizeApiBaseUrl(DEFAULT_PRODUCTION_ORIGIN);

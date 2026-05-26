@@ -5,9 +5,11 @@
 /.next/
 /out/
 
-# Env & local
+# Env & local (keep .env.example and .env.production)
 .env
-.env*.local
+.env.local
+.env.development.local
+.env.test.local
 
 # Misc
 .vercel

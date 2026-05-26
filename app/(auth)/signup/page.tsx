@@ -49,8 +49,12 @@ export default function SignupPage() {
         <ThemeToggle />
       </div>
       <div className="w-full max-w-md rounded-xl border border-gold/25 bg-surface-card shadow-gold p-6 space-y-4">
-        <h1 className="text-2xl font-semibold text-gold-bright">Create account</h1>
-        <p className="text-sm text-muted">Start your FounderOS workspace</p>
+        <h1 className="text-2xl font-semibold">
+          <span className="text-ink">RN</span>
+          <span className="text-gold-bright">XA</span>
+          <span className="text-ink"> Digital</span>
+        </h1>
+        <p className="text-sm text-muted">Create your workspace account</p>
         <form
           className="space-y-3"
           onSubmit={(e) => {

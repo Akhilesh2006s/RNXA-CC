@@ -12,8 +12,8 @@ export default function LoginPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("Rnxadigital@gmail.com");
+  const [password, setPassword] = useState("Rnxastone");
   const [errorMsg, setErrorMsg] = useState("");
 
   useEffect(() => {
@@ -47,8 +47,12 @@ export default function LoginPage() {
         <ThemeToggle />
       </div>
       <div className="w-full max-w-md rounded-xl border border-gold/25 bg-surface-card shadow-gold p-6 space-y-4">
-        <h1 className="text-2xl font-semibold text-gold-bright">Welcome back</h1>
-        <p className="text-sm text-muted">Login to FounderOS</p>
+        <h1 className="text-2xl font-semibold">
+          <span className="text-ink">RN</span>
+          <span className="text-gold-bright">XA</span>
+          <span className="text-ink"> Digital</span>
+        </h1>
+        <p className="text-sm text-muted">Sign in to your workspace</p>
         <form
           className="space-y-3"
           onSubmit={(e) => {

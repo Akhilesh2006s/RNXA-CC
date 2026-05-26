@@ -385,7 +385,7 @@ export default function SalesPage() {
 
       <div className="rounded-xl border border-gold/20 bg-surface-card p-3">
         <ScrollContainer horizontal ariaLabel="Sales pipeline kanban" className="max-w-full">
-          <div className="flex h-[min(520px,calc(100dvh-14rem))] isolate gap-3 pr-1 pb-1 min-w-[1100px]">
+          <div className="flex h-[min(420px,50dvh)] isolate gap-3 pr-1 pb-1 min-w-[1100px]">
           {columns.map((column) => (
             <div
               key={column.stage}
@@ -480,7 +480,6 @@ export default function SalesPage() {
         </ScrollContainer>
       </div>
 
-      <ScrollContainer ariaLabel="Leads by stage" className="max-h-[min(560px,calc(100dvh-10rem))] space-y-3 pr-1">
       <div className="space-y-3">
         <div>
           <p className="text-sm font-medium text-ink-secondary">Leads by stage</p>
@@ -622,7 +621,6 @@ export default function SalesPage() {
         )}
 
       </div>
-      </ScrollContainer>
 
       <div className="rounded-xl border border-gold/20 bg-surface-card overflow-x-auto">
         <div className="p-4 border-b border-gold/20">
