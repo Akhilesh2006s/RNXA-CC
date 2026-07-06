@@ -51,7 +51,7 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const [mounted, setMounted] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -78,10 +78,13 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
   if (isLoading) {
     return (
       <div
-        className="min-h-screen grid place-items-center bg-surface text-muted text-sm"
+        className="min-h-screen grid place-items-center bg-surface text-muted"
         suppressHydrationWarning
       >
-        Loading session…
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-gold/20 border-t-gold-bright" />
+          <p className="text-sm">Loading session…</p>
+        </div>
       </div>
     );
   }
@@ -102,7 +105,7 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
 
       <div className="grid h-dvh max-h-dvh min-h-0 overflow-hidden grid-cols-1 md:grid-cols-[64px_1fr] lg:grid-cols-[260px_1fr]">
         <aside
-          className={`fixed inset-y-0 left-0 z-50 flex flex-col border-r border-gold/20 bg-surface-card text-ink shadow-[inset_-1px_0_0_rgba(46,41,115,0.15)] dark:shadow-[inset_-1px_0_0_rgba(57,255,20,0.1)] transition-transform duration-300 ease-in-out w-72 p-4 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} md:relative md:w-auto md:translate-x-0 md:p-2 lg:w-[260px] lg:p-4`}
+          className={`fixed inset-y-0 left-0 z-50 flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden border-r border-gold/20 bg-surface-card/95 text-ink shadow-[inset_-1px_0_0_rgba(46,41,115,0.15)] backdrop-blur-xl dark:shadow-[inset_-1px_0_0_rgba(57,255,20,0.1)] transition-transform duration-300 ease-in-out w-72 p-4 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} md:relative md:h-full md:max-h-dvh md:w-auto md:translate-x-0 md:p-2 lg:w-[260px] lg:p-4`}
         >
           <div className="mb-6 flex shrink-0 items-start justify-between gap-2 md:mb-4 md:flex-col md:items-center md:gap-3 lg:mb-6 lg:flex-row lg:items-start">
             <div className="min-w-0 md:hidden lg:block">
@@ -125,7 +128,10 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
             </div>
           </div>
 
-          <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain pr-1 md:space-y-2 md:pr-0">
+          <nav
+            aria-label="Main navigation"
+            className="sidebar-nav-scroll min-h-0 flex-1 space-y-1 pr-1 md:space-y-2 md:pr-0.5 lg:pr-1"
+          >
             {navItems.map((item) => {
               const active =
                 pathname === item.href || (item.href !== "/" && pathname.startsWith(`${item.href}/`));
@@ -134,10 +140,10 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
                   key={item.href}
                   href={item.href}
                   title={item.label}
-                  className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors md:justify-center md:px-2 lg:justify-start lg:px-3 ${
+                  className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all duration-150 md:justify-center md:px-2 lg:justify-start lg:px-3 ${
                     active
-                      ? "bg-gold/15 text-gold-bright border border-gold/30 shadow-gold"
-                      : "text-muted hover:bg-surface-input/80 dark:hover:bg-surface-card hover:text-gold-bright"
+                      ? "border border-gold/30 bg-gold/12 text-gold-bright shadow-gold"
+                      : "text-muted hover:border hover:border-gold/15 hover:bg-surface-input/60 hover:text-gold-bright"
                   }`}
                 >
                   {item.icon && <item.icon size={18} className="shrink-0" />}
@@ -146,6 +152,13 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
               );
             })}
           </nav>
+
+          {user ? (
+            <div className="mt-4 hidden shrink-0 rounded-lg border border-gold/15 bg-surface-lift/50 px-3 py-2.5 lg:block">
+              <p className="truncate text-sm font-medium text-ink">{user.name}</p>
+              <p className="truncate text-xs text-muted">{user.role}</p>
+            </div>
+          ) : null}
 
           <button
             type="button"

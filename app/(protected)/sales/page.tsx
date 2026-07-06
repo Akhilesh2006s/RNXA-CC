@@ -2,9 +2,23 @@
 
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  ArrowRight,
+  BarChart3,
+  Building2,
+  ChevronRight,
+  LayoutGrid,
+  Plus,
+  Search,
+  Sparkles,
+  TrendingUp,
+  UserPlus,
+  Users
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import { ScrollContainer } from "@/components/ui/scroll-container";
+import { StatCard } from "@/components/ui/stat-card";
 import { PageShell } from "@/components/page-shell";
 import { apiClient } from "@/lib/api-client";
 import { appToast } from "@/lib/app-toast";
@@ -12,7 +26,8 @@ import { toastApiError } from "@/components/ui/toast-handler";
 import { formatInr } from "@/lib/format-inr";
 
 type Lead = {
-  _id: string;
+  _id?: string;
+  id?: string;
   company: string;
   contactPerson: string;
   stage: string;
@@ -31,31 +46,249 @@ type Client = {
   paymentStatus?: string;
 };
 
-const PIPELINE = [
+type TabId = "pipeline" | "insights" | "clients";
+
+const STAGE_FLOW = [
   "New Lead",
   "Contacted",
   "Qualified",
   "Proposal Sent",
-  "Negotiation",
-  "Won",
-  "Lost"
+  "Negotiation"
 ] as const;
 
-function leadCanManualConvert(lead: Lead) {
+const PIPELINE = [...STAGE_FLOW, "Won", "Lost"] as const;
+
+const STAGE_STYLE: Record<string, { dot: string; header: string; border: string }> = {
+  "New Lead": { dot: "bg-sky-400", header: "text-sky-300", border: "border-sky-500/25" },
+  Contacted: { dot: "bg-cyan-400", header: "text-cyan-300", border: "border-cyan-500/25" },
+  Qualified: { dot: "bg-violet-400", header: "text-violet-300", border: "border-violet-500/25" },
+  "Proposal Sent": { dot: "bg-amber-400", header: "text-amber-300", border: "border-amber-500/25" },
+  Negotiation: { dot: "bg-orange-400", header: "text-orange-300", border: "border-orange-500/25" },
+  Won: { dot: "bg-emerald-400", header: "text-emerald-300", border: "border-emerald-500/25" },
+  Lost: { dot: "bg-red-400/80", header: "text-red-300/90", border: "border-red-500/20" }
+};
+
+function leadId(lead: Lead): string {
+  const raw = lead._id ?? lead.id;
+  if (typeof raw === "string" && raw.length > 0) return raw;
+  if (raw && typeof raw === "object") {
+    const obj = raw as Record<string, unknown>;
+    if (typeof obj.$oid === "string") return obj.$oid;
+  }
+  return "";
+}
+
+function getNextStage(current: string): (typeof STAGE_FLOW)[number] | null {
+  const idx = STAGE_FLOW.indexOf(current as (typeof STAGE_FLOW)[number]);
+  if (idx === -1 || idx >= STAGE_FLOW.length - 1) return null;
+  return STAGE_FLOW[idx + 1];
+}
+
+function leadCanAdvance(lead: Lead): boolean {
   if (lead.convertedClientId) return false;
-  if (lead.stage === "Lost") return false;
-  return true;
+  if (lead.stage === "Lost" || lead.stage === "Won") return false;
+  return getNextStage(lead.stage) !== null;
+}
+
+function leadCanConvert(lead: Lead): boolean {
+  if (lead.convertedClientId) return false;
+  return lead.stage === "Proposal Sent" || lead.stage === "Negotiation";
+}
+
+function leadCanMarkLost(lead: Lead): boolean {
+  if (lead.convertedClientId) return false;
+  return lead.stage !== "Lost" && lead.stage !== "Won";
+}
+
+function LeadCard({
+  lead,
+  onAdvance,
+  onConvert,
+  onMarkLost,
+  onDelete,
+  isBusy,
+  isConverting,
+  isDeleting
+}: {
+  lead: Lead;
+  onAdvance: (id: string, nextStage: string) => void;
+  onConvert: (id: string) => void;
+  onMarkLost: (id: string) => void;
+  onDelete: (id: string) => void;
+  isBusy: boolean;
+  isConverting: boolean;
+  isDeleting: boolean;
+}) {
+  const id = leadId(lead);
+  const next = getNextStage(lead.stage);
+
+  if (!id) {
+    return (
+      <div className="rounded-xl border border-red-500/30 bg-red-950/20 p-3 text-xs text-red-400">
+        Invalid lead id — refresh the page
+      </div>
+    );
+  }
+
+  if (lead.convertedClientId) {
+    return (
+      <article className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-3.5">
+        <p className="text-sm font-semibold text-ink">{lead.company}</p>
+        <p className="text-xs text-muted">{lead.contactPerson}</p>
+        <p className="mt-2 text-xs font-medium text-emerald-400">Converted to client</p>
+      </article>
+    );
+  }
+
+  if (lead.stage === "Won" || lead.stage === "Lost") {
+    return (
+      <article className="rounded-xl border border-gold/10 bg-surface/40 p-3.5 opacity-80">
+        <p className="text-sm font-semibold text-ink">{lead.company}</p>
+        <p className="text-xs text-muted">{lead.contactPerson}</p>
+        {lead.estimatedDealValue != null && (
+          <p className="mt-1 text-xs text-gold-bright">{formatInr(lead.estimatedDealValue)}</p>
+        )}
+        <p className="mt-2 text-xs text-muted">{lead.stage === "Won" ? "Deal won" : "Marked lost"}</p>
+      </article>
+    );
+  }
+
+  return (
+    <article className="rounded-xl border border-gold/15 bg-surface/70 p-3.5 shadow-sm transition hover:border-gold/30 hover:bg-surface-card">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-ink">{lead.company}</p>
+          <p className="truncate text-xs text-muted">{lead.contactPerson}</p>
+          {lead.email ? <p className="mt-0.5 truncate text-[11px] text-muted/80">{lead.email}</p> : null}
+        </div>
+        {lead.estimatedDealValue != null && (
+          <span className="shrink-0 rounded-md bg-gold/10 px-2 py-0.5 text-[11px] font-semibold text-gold-bright">
+            {formatInr(lead.estimatedDealValue)}
+          </span>
+        )}
+      </div>
+
+      <div className="mt-3 flex flex-col gap-1.5 border-t border-gold/10 pt-3">
+        {next && leadCanAdvance(lead) ? (
+          <button
+            type="button"
+            className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-gold/25 bg-surface-lift px-2.5 py-2 text-xs font-medium text-gold-bright transition hover:bg-surface-input disabled:opacity-50"
+            disabled={isBusy}
+            onClick={() => onAdvance(id, next)}
+          >
+            Move to {next}
+            <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+          </button>
+        ) : null}
+
+        {leadCanConvert(lead) ? (
+          <button
+            type="button"
+            className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-gold-cta px-2.5 py-2 text-xs font-semibold shadow-gold transition hover:brightness-110 disabled:opacity-50"
+            disabled={isConverting}
+            onClick={() => onConvert(id)}
+          >
+            <UserPlus className="h-3.5 w-3.5" aria-hidden />
+            Convert to client
+          </button>
+        ) : null}
+
+        <div className="flex items-center justify-between gap-2 pt-0.5">
+          {leadCanMarkLost(lead) ? (
+            <button
+              type="button"
+              className="text-[11px] text-red-400/90 transition hover:text-red-300 disabled:opacity-50"
+              disabled={isBusy}
+              onClick={() => onMarkLost(id)}
+            >
+              Mark lost
+            </button>
+          ) : (
+            <span />
+          )}
+          <button
+            type="button"
+            className="text-[11px] text-muted transition hover:text-red-400 disabled:opacity-50"
+            disabled={isDeleting}
+            onClick={() => onDelete(id)}
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function PipelineColumn({
+  stage,
+  leads,
+  onAdvance,
+  onConvert,
+  onMarkLost,
+  onDelete,
+  isBusy,
+  isConverting,
+  isDeleting
+}: {
+  stage: string;
+  leads: Lead[];
+  onAdvance: (id: string, nextStage: string) => void;
+  onConvert: (id: string) => void;
+  onMarkLost: (id: string) => void;
+  onDelete: (id: string) => void;
+  isBusy: boolean;
+  isConverting: boolean;
+  isDeleting: boolean;
+}) {
+  const style = STAGE_STYLE[stage] ?? STAGE_STYLE["New Lead"];
+
+  return (
+    <div className={`flex w-[260px] shrink-0 flex-col rounded-xl border bg-surface/60 ${style.border}`}>
+      <div className="flex shrink-0 items-center justify-between border-b border-gold/10 px-3 py-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className={`h-2 w-2 shrink-0 rounded-full ${style.dot}`} />
+          <p className={`truncate text-xs font-semibold uppercase tracking-wide ${style.header}`}>
+            {stage}
+          </p>
+        </div>
+        <span className="rounded-full bg-surface-lift px-2 py-0.5 text-[11px] font-medium text-muted">
+          {leads.length}
+        </span>
+      </div>
+      <ScrollContainer ariaLabel={`${stage} leads`} className="min-h-0 flex-1 px-2 py-2">
+        <div className="space-y-2.5 pb-2">
+          {leads.map((lead) => (
+            <LeadCard
+              key={leadId(lead) || `${lead.company}-${lead.contactPerson}`}
+              lead={lead}
+              onAdvance={onAdvance}
+              onConvert={onConvert}
+              onMarkLost={onMarkLost}
+              onDelete={onDelete}
+              isBusy={isBusy}
+              isConverting={isConverting}
+              isDeleting={isDeleting}
+            />
+          ))}
+          {!leads.length && <p className="py-8 text-center text-[11px] text-muted/70">Empty</p>}
+        </div>
+      </ScrollContainer>
+    </div>
+  );
 }
 
 export default function SalesPage() {
   const queryClient = useQueryClient();
+  const [tab, setTab] = useState<TabId>("pipeline");
+  const [showAddLead, setShowAddLead] = useState(false);
+  const [search, setSearch] = useState("");
   const [company, setCompany] = useState("");
   const [contactPerson, setContactPerson] = useState("");
   const [email, setEmail] = useState("");
   const [estimatedDealValue, setEstimatedDealValue] = useState("");
   const [lostReasonDraft, setLostReasonDraft] = useState("");
   const [leadPendingDelete, setLeadPendingDelete] = useState<string | null>(null);
-  const [selectedLeadIds, setSelectedLeadIds] = useState<Set<string>>(() => new Set());
 
   const leadsQuery = useQuery({
     queryKey: ["sales", "leads"],
@@ -101,7 +334,8 @@ export default function SalesPage() {
       queryClient.invalidateQueries({ queryKey: ["sales", "leads"] }),
       queryClient.invalidateQueries({ queryKey: ["sales", "clients"] }),
       queryClient.invalidateQueries({ queryKey: ["sales", "analytics"] }),
-      queryClient.invalidateQueries({ queryKey: ["finance"] })
+      queryClient.invalidateQueries({ queryKey: ["finance"] }),
+      queryClient.invalidateQueries({ queryKey: ["clients"] })
     ]);
 
   const createLeadMutation = useMutation({
@@ -119,7 +353,10 @@ export default function SalesPage() {
       setContactPerson("");
       setEmail("");
       setEstimatedDealValue("");
-    }
+      setShowAddLead(false);
+      appToast.success("Lead added to New Lead stage");
+    },
+    onError: (err) => toastApiError(err, "Could not create lead")
   });
 
   const stageMutation = useMutation({
@@ -129,36 +366,22 @@ export default function SalesPage() {
         lostReason: payload.lostReason
       });
     },
-    onSuccess: () => void invalidate()
+    onSuccess: () => {
+      void invalidate();
+      appToast.success("Lead stage updated");
+    },
+    onError: (err) => toastApiError(err, "Could not update stage")
   });
 
   const convertMutation = useMutation({
-    mutationFn: async (payload: { id: string; force?: boolean }) => {
-      await apiClient.post(`/sales/leads/${payload.id}/convert`, {
-        force: Boolean(payload.force)
-      });
+    mutationFn: async (id: string) => {
+      await apiClient.post(`/sales/leads/${id}/convert`, { force: false });
     },
-    onSuccess: () => void invalidate()
-  });
-
-  const bulkConvertMutation = useMutation({
-    mutationFn: async (ids: string[]) => {
-      const results = await Promise.allSettled(
-        ids.map((id) => apiClient.post(`/sales/leads/${id}/convert`, { force: true }))
-      );
-      const failed = results.filter((r) => r.status === "rejected").length;
-      return { ok: ids.length - failed, failed };
-    },
-    onSuccess: (res) => {
-      setSelectedLeadIds(new Set());
+    onSuccess: () => {
       void invalidate();
-      if (res.failed === 0) {
-        appToast.success(`${res.ok} lead(s) moved to Clients`);
-      } else {
-        appToast.success(`${res.ok} converted · ${res.failed} failed (e.g. lost or already converted)`);
-      }
+      appToast.success("Lead converted to client");
     },
-    onError: (err) => toastApiError(err, "Bulk convert failed")
+    onError: (err) => toastApiError(err, "Convert only allowed from Proposal Sent or Negotiation")
   });
 
   const deleteMutation = useMutation({
@@ -173,105 +396,260 @@ export default function SalesPage() {
     onError: (err) => toastApiError(err, "Could not delete lead")
   });
 
-  function patchLeadStage(leadId: string, nextStage: string) {
-    if (nextStage === "Lost") {
-      stageMutation.mutate({
-        id: leadId,
-        stage: nextStage,
-        lostReason:
-          lostReasonDraft.trim().length >= 2 ? lostReasonDraft : "No reason captured"
-      });
-    } else {
-      stageMutation.mutate({ id: leadId, stage: nextStage });
-    }
+  function advanceLead(id: string, nextStage: string) {
+    stageMutation.mutate({ id, stage: nextStage });
   }
 
-  const columns = useMemo(() => {
-    const items = leadsQuery.data ?? [];
-    return PIPELINE.map((stage) => ({
-      stage,
-      leads: items.filter((l) => l.stage === stage)
-    }));
-  }, [leadsQuery.data]);
-
-  const selectableLeadIds = useMemo(() => {
-    const ids: string[] = [];
-    for (const l of leadsQuery.data ?? []) {
-      if (leadCanManualConvert(l)) ids.push(l._id);
-    }
-    return ids;
-  }, [leadsQuery.data]);
-
-  function toggleLeadSelection(leadId: string) {
-    setSelectedLeadIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(leadId)) next.delete(leadId);
-      else next.add(leadId);
-      return next;
+  function markLeadLost(id: string) {
+    stageMutation.mutate({
+      id,
+      stage: "Lost",
+      lostReason: lostReasonDraft.trim().length >= 2 ? lostReasonDraft : "No reason captured"
     });
   }
 
-  function selectAllConvertible() {
-    setSelectedLeadIds(new Set(selectableLeadIds));
-  }
+  const filteredLeads = useMemo(() => {
+    const items = leadsQuery.data ?? [];
+    const q = search.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter(
+      (l) =>
+        l.company.toLowerCase().includes(q) ||
+        l.contactPerson.toLowerCase().includes(q) ||
+        (l.email?.toLowerCase().includes(q) ?? false)
+    );
+  }, [leadsQuery.data, search]);
 
-  function clearLeadSelection() {
-    setSelectedLeadIds(new Set());
-  }
+  const columns = useMemo(
+    () =>
+      PIPELINE.map((stage) => ({
+        stage,
+        leads: filteredLeads.filter((l) => l.stage === stage)
+      })),
+    [filteredLeads]
+  );
+
+  const isBusy = stageMutation.isPending || convertMutation.isPending;
+  const analytics = analyticsQuery.data;
+
+  const tabs: { id: TabId; label: string; icon: typeof LayoutGrid }[] = [
+    { id: "pipeline", label: "Pipeline", icon: LayoutGrid },
+    { id: "insights", label: "Insights", icon: BarChart3 },
+    { id: "clients", label: "Clients", icon: Users }
+  ];
 
   return (
     <PageShell
       title="Sales CRM"
-      description="Pipeline, analytics, manual bulk convert to Clients, and Negotiation workflow."
+      description="Track leads through your pipeline and convert winning deals into clients."
+      actions={
+        analytics ? (
+          <div className="hidden items-center gap-3 rounded-xl border border-gold/15 bg-surface-card px-4 py-2 text-sm sm:flex">
+            <span className="text-muted">Open deals</span>
+            <span className="font-semibold text-gold-bright">{analytics.openDealCount}</span>
+            <span className="text-muted/50">·</span>
+            <span className="font-semibold text-ink">{formatInr(analytics.revenueForecast)}</span>
+          </div>
+        ) : null
+      }
     >
-      {analyticsQuery.data && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-          <div className="rounded-xl border border-gold/20 bg-surface-card p-4 space-y-2">
-            <p className="text-xs text-muted uppercase">Win rate (closed)</p>
-            <p className="text-3xl font-semibold">{analyticsQuery.data.conversionRate}%</p>
-            <p className="text-xs text-muted">
-              {analyticsQuery.data.wins} won · {analyticsQuery.data.losses} lost
-            </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="inline-flex rounded-xl border border-gold/15 bg-surface-card p-1">
+          {tabs.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setTab(id)}
+              className={`inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition ${
+                tab === id
+                  ? "bg-gold/15 text-gold-bright shadow-sm"
+                  : "text-muted hover:bg-surface-lift hover:text-ink"
+              }`}
+            >
+              <Icon className="h-4 w-4" aria-hidden />
+              {label}
+              {id === "clients" && clientsQuery.data?.length ? (
+                <span className="rounded-full bg-surface-lift px-1.5 py-0.5 text-[10px] text-muted">
+                  {clientsQuery.data.length}
+                </span>
+              ) : null}
+            </button>
+          ))}
+        </div>
+
+        {tab === "pipeline" && (
+          <div className="flex flex-1 flex-col gap-2 sm:max-w-md sm:flex-row">
+            <label className="relative flex-1">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
+                aria-hidden
+              />
+              <input
+                className="input-field pl-9 text-sm"
+                placeholder="Search leads…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </label>
+            <button
+              type="button"
+              className="btn-primary inline-flex w-auto shrink-0 items-center justify-center gap-2 px-4 py-2 text-sm"
+              onClick={() => setShowAddLead((v) => !v)}
+            >
+              <Plus className="h-4 w-4" aria-hidden />
+              {showAddLead ? "Close" : "New lead"}
+            </button>
           </div>
-          <div className="rounded-xl border border-gold/20 bg-surface-card p-4 space-y-2">
-            <p className="text-xs text-muted uppercase">Pipeline forecast</p>
-            <p className="text-3xl font-semibold">
-              {formatInr(analyticsQuery.data.revenueForecast)}
-            </p>
-            <p className="text-xs text-muted">{analyticsQuery.data.openDealCount} open deals</p>
+        )}
+      </div>
+
+      {tab === "pipeline" && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-gold/10 bg-surface/50 px-3 py-2.5 text-xs text-muted">
+            <Sparkles className="h-3.5 w-3.5 shrink-0 text-gold" aria-hidden />
+            {STAGE_FLOW.map((stage, i) => (
+              <span key={stage} className="inline-flex items-center gap-1.5">
+                <span className="rounded-md border border-gold/15 bg-surface-card px-2 py-0.5 font-medium text-ink-secondary">
+                  {stage}
+                </span>
+                {i < STAGE_FLOW.length - 1 ? (
+                  <ChevronRight className="h-3 w-3 text-gold/40" aria-hidden />
+                ) : null}
+              </span>
+            ))}
+            <span className="ml-1 text-muted/80">· convert in Proposal or Negotiation</span>
           </div>
-          <div className="rounded-xl border border-gold/20 bg-surface-card p-4">
-            <p className="text-xs text-muted uppercase mb-2">Top closers</p>
-            <div className="space-y-1 text-sm">
-              {analyticsQuery.data.salesLeaderboard.slice(0, 5).map((row, idx) => (
-                <div
-                  key={row.userId ? String(row.userId) : `rep-${idx}`}
-                  className="flex justify-between text-ink-secondary"
+
+          {showAddLead && (
+            <div className="chart-card space-y-4">
+              <div>
+                <p className="text-sm font-semibold text-ink">Add new lead</p>
+                <p className="text-xs text-muted">Starts at New Lead. Advance one stage at a time.</p>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <input
+                  className="input-field text-sm"
+                  placeholder="Company *"
+                  value={company}
+                  onChange={(e) => setCompany(e.target.value)}
+                />
+                <input
+                  className="input-field text-sm"
+                  placeholder="Contact person *"
+                  value={contactPerson}
+                  onChange={(e) => setContactPerson(e.target.value)}
+                />
+                <input
+                  className="input-field text-sm"
+                  placeholder="Email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+                <input
+                  className="input-field text-sm"
+                  type="number"
+                  placeholder="Est. deal value (₹)"
+                  value={estimatedDealValue}
+                  onChange={(e) => setEstimatedDealValue(e.target.value)}
+                />
+              </div>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <label className="grid flex-1 gap-1 text-xs text-muted">
+                  Lost reason preset (optional — used when marking lost)
+                  <input
+                    className="input-field text-sm"
+                    placeholder="e.g. Price, timing, competitor"
+                    value={lostReasonDraft}
+                    onChange={(e) => setLostReasonDraft(e.target.value)}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="btn-primary w-auto shrink-0 px-6 py-2.5 text-sm"
+                  disabled={!company || !contactPerson || createLeadMutation.isPending}
+                  onClick={() => createLeadMutation.mutate()}
                 >
-                  <span>{row.name}</span>
-                  <span className="text-muted">
-                    {row.wins} wins · {formatInr(row.revenue)}
-                  </span>
-                </div>
-              ))}
-              {!analyticsQuery.data.salesLeaderboard.length && (
-                <p className="text-xs text-muted/80">No closed deals yet.</p>
-              )}
+                  {createLeadMutation.isPending ? "Adding…" : "Create lead"}
+                </button>
+              </div>
             </div>
+          )}
+
+          {leadsQuery.isLoading ? (
+            <div className="chart-card py-16 text-center text-sm text-muted">Loading pipeline…</div>
+          ) : (
+            <div className="chart-card overflow-hidden p-0">
+              <ScrollContainer horizontal ariaLabel="Sales pipeline board" className="max-w-full">
+                <div className="flex min-h-[520px] min-w-[1180px] gap-3 p-4">
+                  {columns.map((column) => (
+                    <PipelineColumn
+                      key={column.stage}
+                      stage={column.stage}
+                      leads={column.leads}
+                      onAdvance={advanceLead}
+                      onConvert={(id) => convertMutation.mutate(id)}
+                      onMarkLost={markLeadLost}
+                      onDelete={setLeadPendingDelete}
+                      isBusy={isBusy}
+                      isConverting={convertMutation.isPending}
+                      isDeleting={deleteMutation.isPending}
+                    />
+                  ))}
+                </div>
+              </ScrollContainer>
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === "insights" && analyticsQuery.isLoading && (
+        <div className="chart-card py-16 text-center text-sm text-muted">Loading insights…</div>
+      )}
+
+      {tab === "insights" && analytics && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <StatCard
+              title="Win rate"
+              value={`${analytics.conversionRate}%`}
+              icon={TrendingUp}
+              hint={`${analytics.wins} won · ${analytics.losses} lost`}
+              accent="success"
+            />
+            <StatCard
+              title="Pipeline forecast"
+              value={formatInr(analytics.revenueForecast)}
+              hint={`${analytics.openDealCount} open deals`}
+              icon={BarChart3}
+            />
+            <StatCard
+              title="Converted clients"
+              value={String(clientsQuery.data?.length ?? 0)}
+              hint="From won / converted leads"
+              icon={Building2}
+            />
           </div>
-          <div className="lg:col-span-3 rounded-xl border border-gold/20 bg-surface-card p-4">
-            <p className="text-xs text-muted uppercase mb-3">Pipeline funnel</p>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-7">
-              {analyticsQuery.data.funnel.map((f) => {
-                const max = Math.max(...analyticsQuery.data!.funnel.map((x) => x.count), 1);
+
+          <div className="chart-card">
+            <p className="mb-4 text-sm font-semibold text-ink-secondary">Pipeline funnel</p>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+              {analytics.funnel.map((f) => {
+                const max = Math.max(...analytics.funnel.map((x) => x.count), 1);
                 const pct = Math.round((f.count / max) * 100);
+                const style = STAGE_STYLE[f.stage];
                 return (
-                  <div key={f.stage} className="rounded-lg bg-surface border border-gold/20 p-2">
-                    <p className="text-[10px] text-muted leading-tight line-clamp-2">{f.stage}</p>
-                    <p className="text-lg font-semibold">{f.count}</p>
-                    <div className="mt-2 h-1.5 rounded bg-surface-lift overflow-hidden">
+                  <div
+                    key={f.stage}
+                    className={`rounded-xl border bg-surface/50 p-3 ${style?.border ?? "border-gold/15"}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      {style ? <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} /> : null}
+                      <p className="line-clamp-2 text-[11px] font-medium text-muted">{f.stage}</p>
+                    </div>
+                    <p className="mt-2 text-2xl font-bold text-ink">{f.count}</p>
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-lift">
                       <div
-                        className="h-full rounded bg-gradient-to-r from-gold-dim via-gold to-gold-bright transition-all opacity-95"
+                        className="h-full rounded-full bg-gradient-to-r from-gold-dim via-gold to-gold-bright"
                         style={{ width: `${pct}%` }}
                       />
                     </div>
@@ -281,388 +659,104 @@ export default function SalesPage() {
             </div>
           </div>
 
-          <div className="lg:col-span-3 rounded-xl border border-gold/20 bg-surface-card p-4">
-            <p className="text-xs text-muted uppercase mb-2">Lost reasons</p>
-            <div className="flex flex-wrap gap-2">
-              {analyticsQuery.data.lostReasons.map((r) => (
-                <span key={r.reason} className="rounded-full bg-surface-lift px-3 py-1 text-xs text-ink-secondary">
-                  {r.reason} · {r.count}
-                </span>
-              ))}
-              {!analyticsQuery.data.lostReasons.length && (
-                <span className="text-xs text-muted/80">No losses logged yet.</span>
-              )}
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="chart-card">
+              <p className="mb-3 text-sm font-semibold text-ink-secondary">Top closers</p>
+              <div className="space-y-2">
+                {analytics.salesLeaderboard.slice(0, 5).map((row, idx) => (
+                  <div
+                    key={row.userId ? String(row.userId) : `rep-${idx}`}
+                    className="flex items-center justify-between rounded-lg border border-gold/10 bg-surface/50 px-3 py-2 text-sm"
+                  >
+                    <span className="font-medium text-ink">{row.name}</span>
+                    <span className="text-xs text-muted">
+                      {row.wins} wins · {formatInr(row.revenue)}
+                    </span>
+                  </div>
+                ))}
+                {!analytics.salesLeaderboard.length && (
+                  <p className="text-xs text-muted">No closed deals yet.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="chart-card">
+              <p className="mb-3 text-sm font-semibold text-ink-secondary">Lost reasons</p>
+              <div className="flex flex-wrap gap-2">
+                {analytics.lostReasons.map((r) => (
+                  <span
+                    key={r.reason}
+                    className="rounded-full border border-gold/15 bg-surface-lift px-3 py-1 text-xs text-ink-secondary"
+                  >
+                    {r.reason} · {r.count}
+                  </span>
+                ))}
+                {!analytics.lostReasons.length && (
+                  <span className="text-xs text-muted">No losses logged yet.</span>
+                )}
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      <div className="rounded-xl border border-gold/30 bg-surface-card p-4 space-y-3">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-sm font-medium text-ink-secondary">Manual push to Clients</p>
-            <p className="text-xs text-muted mt-1 max-w-xl">
-              Select any open lead (except Lost), then convert without waiting on Negotiation. Negotiation still
-              supports one-click convert. Selection clears after a successful run.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-muted">{selectedLeadIds.size} selected</span>
-            <button
-              type="button"
-              className="rounded-lg border border-gold/30 px-3 py-1.5 text-xs text-ink-secondary hover:bg-surface-lift disabled:opacity-50"
-              disabled={!selectableLeadIds.length}
-              onClick={selectAllConvertible}
-            >
-              Select all eligible
-            </button>
-            <button
-              type="button"
-              className="rounded-lg border border-gold/30 px-3 py-1.5 text-xs text-ink-secondary hover:bg-surface-lift disabled:opacity-50"
-              disabled={!selectedLeadIds.size}
-              onClick={clearLeadSelection}
-            >
-              Clear
-            </button>
-            <button
-              type="button"
-              className="rounded-lg bg-gold-cta font-semibold shadow-gold hover:brightness-110 px-4 py-2 text-xs text-black disabled:opacity-50"
-              disabled={!selectedLeadIds.size || bulkConvertMutation.isPending}
-              onClick={() => bulkConvertMutation.mutate([...selectedLeadIds])}
-            >
-              {bulkConvertMutation.isPending ? "Converting…" : `Convert selected (${selectedLeadIds.size})`}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="rounded-xl border border-gold/20 bg-surface-card p-4 space-y-3">
-        <p className="text-sm font-medium text-ink-secondary">Create lead</p>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          <input
-            className="rounded-lg bg-surface-lift px-3 py-2 text-sm"
-            placeholder="Company"
-            value={company}
-            onChange={(e) => setCompany(e.target.value)}
-          />
-          <input
-            className="rounded-lg bg-surface-lift px-3 py-2 text-sm"
-            placeholder="Contact person"
-            value={contactPerson}
-            onChange={(e) => setContactPerson(e.target.value)}
-          />
-          <input
-            className="rounded-lg bg-surface-lift px-3 py-2 text-sm"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-          <input
-            className="rounded-lg bg-surface-lift px-3 py-2 text-sm"
-            type="number"
-            placeholder="Est. deal value (₹)"
-            value={estimatedDealValue}
-            onChange={(e) => setEstimatedDealValue(e.target.value)}
-          />
-        </div>
-        <button
-          className="rounded-lg bg-gold-cta font-semibold shadow-gold hover:brightness-110 px-4 py-2 text-sm"
-          disabled={!company || !contactPerson || createLeadMutation.isPending}
-          onClick={() => createLeadMutation.mutate()}
-        >
-          Add lead
-        </button>
-        <div className="flex gap-3 items-center text-xs">
-          <span className="text-muted">Lost reason (for Lost stage)</span>
-          <input
-            className="flex-1 rounded-lg bg-surface-lift px-3 py-2"
-            placeholder="e.g. Price, timing, competitor"
-            value={lostReasonDraft}
-            onChange={(e) => setLostReasonDraft(e.target.value)}
-          />
-        </div>
-      </div>
-
-      <div className="rounded-xl border border-gold/20 bg-surface-card p-3">
-        <ScrollContainer horizontal ariaLabel="Sales pipeline kanban" className="max-w-full">
-          <div className="flex h-[min(420px,50dvh)] isolate gap-3 pr-1 pb-1 min-w-[1100px]">
-          {columns.map((column) => (
-            <div
-              key={column.stage}
-              className="flex w-72 shrink-0 flex-col rounded-xl border border-gold/20 bg-surface p-3 min-h-0"
-            >
-              <div className="sticky top-0 z-10 shrink-0 flex items-center justify-between border-b border-gold/15 bg-surface pb-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted">{column.stage}</p>
-                <span className="text-[11px] text-muted/80">{column.leads.length}</span>
-              </div>
-              <ScrollContainer
-                ariaLabel={`${column.stage} — scroll column`}
-                className="mt-2 min-h-0 flex-1 pr-1"
-              >
-                <div className="space-y-2">
-                {column.leads.map((lead) => (
-                  <div key={lead._id} className="rounded-lg border border-gold/20 bg-surface-card p-3 space-y-2">
-                    <div className="flex gap-2 justify-between items-start">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium">{lead.company}</p>
-                        <p className="text-xs text-muted">{lead.contactPerson}</p>
-                        {lead.estimatedDealValue != null && (
-                          <p className="text-xs text-gold-bright mt-1">{formatInr(lead.estimatedDealValue)}</p>
-                        )}
-                      </div>
-                      {leadCanManualConvert(lead) ? (
-                        <label className="flex shrink-0 items-center gap-1.5 text-[10px] text-muted cursor-pointer">
-                          <input
-                            type="checkbox"
-                            className="h-3.5 w-3.5 accent-gold rounded border-gold/40"
-                            checked={selectedLeadIds.has(lead._id)}
-                            onChange={() => toggleLeadSelection(lead._id)}
-                          />
-                          Sel.
-                        </label>
-                      ) : null}
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[11px] text-muted">Move stage</label>
-                      <select
-                        className="rounded bg-surface-lift px-2 py-1 text-xs"
-                        value={lead.stage}
-                        onChange={(e) => {
-                          const nextStage = e.target.value;
-                          if (nextStage === "Lost") {
-                            stageMutation.mutate({
-                              id: lead._id,
-                              stage: nextStage,
-                              lostReason:
-                                lostReasonDraft.trim().length >= 2
-                                  ? lostReasonDraft
-                                  : "No reason captured"
-                            });
-                          } else {
-                            stageMutation.mutate({ id: lead._id, stage: nextStage });
-                          }
-                        }}
-                      >
-                        {PIPELINE.map((s) => (
-                          <option key={s} value={s}>
-                            {s}
-                          </option>
-                        ))}
-                      </select>
-                      {lead.stage === "Negotiation" && !lead.convertedClientId && (
-                        <button
-                          type="button"
-                          className="rounded bg-gold px-2 py-1 text-[11px] font-medium text-black hover:brightness-110 mt-1"
-                          onClick={() => convertMutation.mutate({ id: lead._id })}
+      {tab === "clients" && (
+        <div className="space-y-4">
+          <p className="text-sm text-muted">
+            Accounts converted from the pipeline. Open a hub for projects, tasks, and finance.
+          </p>
+          <div className="data-table-wrap">
+            <ScrollContainer ariaLabel="Converted clients" className="data-table-scroll">
+              <table className="data-table">
+                <thead className="sticky top-0 z-10 bg-surface-card shadow-[0_1px_0_rgba(57,255,20,0.12)]">
+                  <tr>
+                    <th>Company</th>
+                    <th>Contact</th>
+                    <th className="text-right">Deal value</th>
+                    <th>Payment</th>
+                    <th className="w-[120px]" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {clientsQuery.data?.map((c) => (
+                    <tr key={c._id} className="group">
+                      <td className="font-medium text-ink">{c.company}</td>
+                      <td className="text-muted">{c.contactPerson}</td>
+                      <td className="text-right font-medium text-gold-bright">
+                        {formatInr(c.dealValue ?? 0)}
+                      </td>
+                      <td>
+                        <span className="inline-flex rounded-full border border-gold/20 bg-surface-lift px-2 py-0.5 text-xs">
+                          {c.paymentStatus ?? "Pending"}
+                        </span>
+                      </td>
+                      <td>
+                        <Link
+                          href={`/clients/${c._id}`}
+                          className="inline-flex items-center gap-1 text-xs font-medium text-gold-bright hover:underline"
                         >
-                          Convert to client
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        className="text-[11px] text-red-400 text-left mt-1 hover:underline disabled:opacity-50"
-                        disabled={deleteMutation.isPending}
-                        onClick={() => setLeadPendingDelete(lead._id)}
-                      >
-                        Delete lead
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                {!column.leads.length && (
-                  <p className="text-[11px] text-muted/80 text-center py-6">Drag cards here · empty</p>
-                )}
-                </div>
-              </ScrollContainer>
-            </div>
-          ))}
-          </div>
-        </ScrollContainer>
-      </div>
-
-      <div className="space-y-3">
-        <div>
-          <p className="text-sm font-medium text-ink-secondary">Leads by stage</p>
-          <p className="text-xs text-muted">
-            Same card + table styling as Clients below; one card per pipeline stage.
-          </p>
-          {!leadsQuery.isLoading && !(leadsQuery.data?.length ?? 0) ? (
-            <p className="mt-2 text-xs text-muted/90">No leads yet · add one above.</p>
-          ) : null}
-        </div>
-        {leadsQuery.isLoading ? (
-          <p className="rounded-xl border border-gold/20 bg-surface-card p-8 text-center text-sm text-muted">
-            Loading leads…
-          </p>
-        ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-          {columns.map(({ stage, leads: stageLeads }) => {
-            const convertibleInStage = stageLeads.filter(leadCanManualConvert);
-            const stageAllSelected =
-              convertibleInStage.length > 0 &&
-              convertibleInStage.every((l) => selectedLeadIds.has(l._id));
-
-            function toggleStageSelect() {
-              setSelectedLeadIds((prev) => {
-                const next = new Set(prev);
-                if (stageAllSelected) {
-                  convertibleInStage.forEach((l) => next.delete(l._id));
-                } else {
-                  convertibleInStage.forEach((l) => next.add(l._id));
-                }
-                return next;
-              });
-            }
-
-            return (
-            <div
-              key={stage}
-              className="-mx-1 overflow-x-auto rounded-xl border border-gold/20 bg-surface-card px-1"
-            >
-              <div className="p-4 border-b border-gold/20">
-                <p className="text-sm font-medium text-ink-secondary">{stage}</p>
-                <p className="text-xs text-muted">
-                  {stageLeads.length === 0
-                    ? "No leads in this stage."
-                    : `${stageLeads.length} ${stageLeads.length === 1 ? "lead" : "leads"} · use checkboxes + Manual push, or convert from Negotiation.`}
-                </p>
-              </div>
-              {stageLeads.length ? (
-                <table className="w-full text-sm min-w-[360px]">
-                  <thead>
-                    <tr className="text-left border-b border-gold/20 text-muted">
-                      <th className="p-3 w-10">
-                        {convertibleInStage.length ? (
-                          <input
-                            type="checkbox"
-                            className="h-3.5 w-3.5 accent-gold rounded border-gold/40"
-                            title="Select all eligible in this stage"
-                            checked={stageAllSelected}
-                            onChange={toggleStageSelect}
-                          />
-                        ) : null}
-                      </th>
-                      <th className="p-3">Company</th>
-                      <th className="p-3">Contact</th>
-                      <th className="p-3 text-right">Deal value</th>
-                      <th className="p-3">Move</th>
-                      <th className="p-3 text-right text-xs font-normal">Actions</th>
+                          Hub
+                          <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+                        </Link>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {stageLeads.map((lead) => (
-                      <tr key={lead._id} className="border-b border-gold/20 hover:bg-surface">
-                        <td className="p-3 align-middle">
-                          {leadCanManualConvert(lead) ? (
-                            <input
-                              type="checkbox"
-                              className="h-3.5 w-3.5 accent-gold rounded border-gold/40"
-                              checked={selectedLeadIds.has(lead._id)}
-                              onChange={() => toggleLeadSelection(lead._id)}
-                              aria-label={`Select ${lead.company}`}
-                            />
-                          ) : (
-                            <span className="text-[10px] text-muted/60">—</span>
-                          )}
-                        </td>
-                        <td className="p-3 font-medium">{lead.company}</td>
-                        <td className="p-3 text-muted">{lead.contactPerson}</td>
-                        <td className="p-3 text-right">
-                          {lead.estimatedDealValue != null ? formatInr(lead.estimatedDealValue) : "—"}
-                        </td>
-                        <td className="p-3">
-                          <select
-                            className="w-full max-w-[10rem] rounded-lg bg-surface-lift px-2 py-1.5 text-xs"
-                            value={lead.stage}
-                            onChange={(e) => patchLeadStage(lead._id, e.target.value)}
-                          >
-                            {PIPELINE.map((s) => (
-                              <option key={s} value={s}>
-                                {s}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="p-3 text-right">
-                          <div className="flex flex-col items-end gap-2">
-                            {lead.stage === "Negotiation" && !lead.convertedClientId ? (
-                              <button
-                                type="button"
-                                className="rounded-lg bg-gold-cta px-2.5 py-1 text-xs font-semibold shadow-gold hover:brightness-110"
-                                onClick={() => convertMutation.mutate({ id: lead._id })}
-                                disabled={convertMutation.isPending}
-                              >
-                                Convert
-                              </button>
-                            ) : null}
-                            <button
-                              type="button"
-                              className="text-xs text-red-400 hover:underline"
-                              onClick={() => setLeadPendingDelete(lead._id)}
-                              disabled={deleteMutation.isPending}
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : (
-                <p className="p-8 text-center text-sm text-muted">
-                  No leads in this stage yet.
+                  ))}
+                </tbody>
+              </table>
+              {!clientsQuery.data?.length && (
+                <p className="p-10 text-center text-sm text-muted">
+                  No clients yet — convert a lead from Proposal Sent or Negotiation.
                 </p>
               )}
-            </div>
-            );
-          })}
+            </ScrollContainer>
+          </div>
         </div>
-        )}
+      )}
 
-      </div>
-
-      <div className="-mx-1 overflow-x-auto rounded-xl border border-gold/20 bg-surface-card px-1">
-        <div className="p-4 border-b border-gold/20">
-          <p className="text-sm font-medium text-ink-secondary">Clients</p>
-          <p className="text-xs text-muted">Converted accounts · use in Finance for invoicing.</p>
-        </div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left border-b border-gold/20 text-muted">
-              <th className="p-3">Company</th>
-              <th className="p-3">Contact</th>
-              <th className="p-3 text-right">Deal value</th>
-              <th className="p-3">Payment</th>
-              <th className="p-3 text-right text-xs font-normal">Hub</th>
-            </tr>
-          </thead>
-          <tbody>
-            {clientsQuery.data?.map((c) => (
-              <tr key={c._id} className="border-b border-gold/20 hover:bg-surface">
-                <td className="p-3 font-medium">{c.company}</td>
-                <td className="p-3 text-muted">{c.contactPerson}</td>
-                <td className="p-3 text-right">{formatInr(c.dealValue ?? 0)}</td>
-                <td className="p-3 text-xs">{c.paymentStatus ?? "—"}</td>
-                <td className="p-3 text-right">
-                  <Link href={`/clients/${c._id}`} className="text-xs text-gold-bright hover:underline">
-                    Projects
-                  </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {!clientsQuery.data?.length && (
-          <p className="p-8 text-center text-sm text-muted">
-            No clients yet · convert from Negotiation or use Manual push to Clients above.
-          </p>
-        )}
-      </div>
       <ConfirmationDialog
         open={Boolean(leadPendingDelete)}
         title="Delete lead?"
-        message="This lead will be removed from the active pipeline. Connected client records are not deleted."
+        message="This lead will be removed from the pipeline. Connected client records are not deleted."
         destructive
         confirmLabel="Delete"
         isLoading={deleteMutation.isPending}

@@ -5,9 +5,11 @@ import { useEffect, useState } from "react";
 import { THEME_STORAGE_KEY } from "@/features/theme/theme-init-script";
 
 export function ThemeToggle({ className = "" }: { className?: string }) {
+  const [mounted, setMounted] = useState(false);
   const [isDark, setIsDark] = useState(true);
 
   useEffect(() => {
+    setMounted(true);
     setIsDark(document.documentElement.classList.contains("dark"));
   }, []);
 
@@ -37,10 +39,11 @@ export function ThemeToggle({ className = "" }: { className?: string }) {
       type="button"
       onClick={toggle}
       className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-gold/25 bg-surface-card text-gold-bright hover:bg-surface-lift ${className}`}
-      aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-      title={isDark ? "Switch to light mode" : "Switch to dark navy mode"}
+      aria-label={mounted ? (isDark ? "Switch to light mode" : "Switch to dark mode") : "Toggle theme"}
+      title={mounted ? (isDark ? "Switch to light mode" : "Switch to dark navy mode") : "Toggle theme"}
+      suppressHydrationWarning
     >
-      {isDark ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
+      {!mounted ? <Sun className="h-[18px] w-[18px]" /> : isDark ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
     </button>
   );
 }

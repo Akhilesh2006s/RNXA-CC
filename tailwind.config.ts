@@ -23,6 +23,9 @@ const config: Config = {
           dim: "var(--color-gold-dim)"
         }
       },
+      fontFamily: {
+        sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "sans-serif"]
+      },
       boxShadow: {
         gold: "var(--shadow-gold)"
       }

@@ -3,9 +3,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { DragEvent, ReactElement } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
+import { TaskWorkflowPanel } from "@/components/task-workflow-panel";
 import { PageShell } from "@/components/page-shell";
+import { getPrimaryAction, isAllowedTaskTransition } from "@/lib/task-workflow";
 import { apiClient } from "@/lib/api-client";
 import { toastApiError } from "@/components/ui/toast-handler";
 import { appToast } from "@/lib/app-toast";
@@ -13,6 +16,13 @@ import { appToast } from "@/lib/app-toast";
 type LinkedClientRef = string | { _id?: string; company?: string };
 
 type ClientOption = { _id: string; company: string };
+
+type ClientProjectOption = {
+  _id: string;
+  name: string;
+  managerName?: string;
+  status?: string;
+};
 
 type TaskListItem = {
   _id: string;
@@ -45,7 +55,15 @@ type TaskDetail = TaskListItem & {
   createdBy?: UserRef | string;
 };
 
-const statuses = ["Pending", "In Progress", "Blocked", "Completed", "Overdue", "Archived"] as const;
+const statuses = [
+  "Pending",
+  "In Progress",
+  "In Review",
+  "Blocked",
+  "Completed",
+  "Overdue",
+  "Archived"
+] as const;
 
 function labelForCommentAuthor(c: CommentRow) {
   const u = c.userId;
@@ -117,6 +135,7 @@ function companyForTaskLinkedClient(task: TaskListItem, clients: ClientOption[])
 
 export default function ActionItemsPage() {
   const qc = useQueryClient();
+  const searchParams = useSearchParams();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [dueDate, setDueDate] = useState("");
@@ -156,6 +175,31 @@ export default function ActionItemsPage() {
     }
   });
 
+  const clientProjectsQuery = useQuery({
+    queryKey: ["clients", "projects-picker", linkedClientId],
+    queryFn: async () => {
+      const { data } = await apiClient.get<{
+        data: { items: ClientProjectOption[]; company: string };
+      }>(`/sales/clients/${linkedClientId}/projects`);
+      return data.data.items;
+    },
+    enabled: Boolean(linkedClientId)
+  });
+
+  const selectedProjectMeta = useMemo(
+    () => clientProjectsQuery.data?.find((p) => p.name === linkedProject),
+    [clientProjectsQuery.data, linkedProject]
+  );
+
+  useEffect(() => {
+    const cid = searchParams.get("clientId");
+    const proj = searchParams.get("project");
+    const tid = searchParams.get("taskId");
+    if (cid) setLinkedClientId(cid);
+    if (proj) setLinkedProject(proj);
+    if (tid) setSelectedTaskId(tid);
+  }, [searchParams]);
+
   const detailQuery = useQuery({
     queryKey: ["tasks", selectedTaskId],
     queryFn: async () => {
@@ -184,6 +228,7 @@ export default function ActionItemsPage() {
       setLinkedClientId("");
       void qc.invalidateQueries({ queryKey: ["tasks"] });
       void qc.invalidateQueries({ queryKey: ["tasks", "action-list"] });
+      void qc.invalidateQueries({ queryKey: ["clients", "hub"] });
       appToast.success("Task created");
     },
     onError: (err) => toastApiError(err, "Could not create task")
@@ -385,68 +430,143 @@ export default function ActionItemsPage() {
   return (
     <PageShell
       title="Action Management"
-      description="Table, Kanban, and calendar (month, week, day) with drag‑drop reschedule · link tasks to clients for the Client hub."
+      description="Assign tasks to clients & projects with due dates. Track what needs doing and log progress the client can see in their hub."
     >
-      <div className="rounded-xl border border-gold/20 bg-surface-card p-4 space-y-3">
-        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-8">
-          <input
-            className="rounded-lg bg-surface-lift px-3 py-2 text-sm xl:col-span-2"
-            placeholder="Task title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
-          <textarea
-            className="rounded-lg bg-surface-lift px-3 py-2 text-sm min-h-[40px] xl:col-span-2 resize-y"
-            placeholder="Description"
-            rows={1}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-          <input className="rounded-lg bg-surface-lift px-3 py-2 text-sm" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-          <input
-            className="rounded-lg bg-surface-lift px-3 py-2 text-sm"
-            placeholder="Linked project"
-            value={linkedProject}
-            onChange={(e) => setLinkedProject(e.target.value)}
-          />
-          <select
-            className="rounded-lg bg-surface-lift px-3 py-2 text-sm"
-            value={linkedClientId}
-            onChange={(e) => setLinkedClientId(e.target.value)}
-          >
-            <option value="">Linked client (optional)</option>
-            {(clientsQuery.data ?? []).map((c) => (
-              <option key={c._id} value={c._id}>
-                {c.company}
-              </option>
-            ))}
-          </select>
-          <select
-            className="rounded-lg bg-surface-lift px-3 py-2 text-sm"
-            value={type}
-            onChange={(e) => setType(e.target.value as TaskListItem["type"])}
-          >
-            {(["One-time", "Daily", "Weekly", "Monthly", "Recurring"] as const).map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
-          <select className="rounded-lg bg-surface-lift px-3 py-2 text-sm" value={priority} onChange={(e) => setPriority(e.target.value)}>
-            {(["Low", "Medium", "High", "Critical"] as const).map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            disabled={!title || createMutation.isPending}
-            onClick={() => createMutation.mutate()}
-            className="rounded-lg bg-gold-cta font-semibold shadow-gold hover:brightness-110 px-3 py-2 text-sm disabled:opacity-60"
-          >
-            {createMutation.isPending ? "Creating…" : "Create"}
-          </button>
+      <div className="chart-card space-y-4">
+        <div>
+          <p className="text-sm font-medium text-ink-secondary">Create task</p>
+          <p className="mt-1 text-xs text-muted">
+            Link to a client and project so it appears in the Client hub. Use description for the action
+            plan — what the team is doing about it.
+          </p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="space-y-1 md:col-span-2">
+            <label className="text-[11px] font-medium uppercase tracking-wide text-muted">Task title</label>
+            <input
+              className="input-field text-sm"
+              placeholder="What needs to be done?"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1 md:col-span-2">
+            <label className="text-[11px] font-medium uppercase tracking-wide text-muted">Action plan</label>
+            <textarea
+              className="input-field min-h-[40px] resize-y text-sm"
+              placeholder="What we're doing about it — visible in client hub"
+              rows={1}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[11px] font-medium uppercase tracking-wide text-muted">Due date</label>
+            <input
+              className="input-field text-sm"
+              type="date"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[11px] font-medium uppercase tracking-wide text-muted">Client</label>
+            <select
+              className="input-field text-sm"
+              value={linkedClientId}
+              onChange={(e) => {
+                setLinkedClientId(e.target.value);
+                setLinkedProject("");
+              }}
+            >
+              <option value="">Select client</option>
+              {(clientsQuery.data ?? []).map((c) => (
+                <option key={c._id} value={c._id}>
+                  {c.company}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1 md:col-span-2">
+            <label className="text-[11px] font-medium uppercase tracking-wide text-muted">Client project</label>
+            {linkedClientId && (clientProjectsQuery.data?.length ?? 0) > 0 ? (
+              <select
+                className="input-field text-sm"
+                value={linkedProject}
+                onChange={(e) => setLinkedProject(e.target.value)}
+              >
+                <option value="">Select project</option>
+                {clientProjectsQuery.data!.map((proj) => (
+                  <option key={proj._id} value={proj.name}>
+                    {proj.name}
+                    {proj.managerName ? ` · Manager: ${proj.managerName}` : ""}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                className="input-field text-sm"
+                placeholder={linkedClientId ? "No projects yet — add in client hub" : "Pick a client first"}
+                value={linkedProject}
+                onChange={(e) => setLinkedProject(e.target.value)}
+                disabled={!linkedClientId}
+              />
+            )}
+            {linkedClientId ? (
+              <div className="flex flex-wrap items-center gap-3">
+                <Link
+                  href={`/clients/${linkedClientId}`}
+                  className="text-[11px] text-gold-bright hover:underline"
+                >
+                  Open client hub →
+                </Link>
+                {selectedProjectMeta?.managerName ? (
+                  <span className="text-[11px] text-muted">
+                    Project manager:{" "}
+                    <span className="font-medium text-ink-secondary">{selectedProjectMeta.managerName}</span>
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+          <div className="space-y-1">
+            <label className="text-[11px] font-medium uppercase tracking-wide text-muted">Type</label>
+            <select
+              className="input-field text-sm"
+              value={type}
+              onChange={(e) => setType(e.target.value as TaskListItem["type"])}
+            >
+              {(["One-time", "Daily", "Weekly", "Monthly", "Recurring"] as const).map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[11px] font-medium uppercase tracking-wide text-muted">Priority</label>
+            <select
+              className="input-field text-sm"
+              value={priority}
+              onChange={(e) => setPriority(e.target.value)}
+            >
+              {(["Low", "Medium", "High", "Critical"] as const).map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-end">
+            <button
+              type="button"
+              disabled={!title || createMutation.isPending}
+              onClick={() => createMutation.mutate()}
+              className="btn-primary w-full py-2 text-sm disabled:opacity-60"
+            >
+              {createMutation.isPending ? "Creating…" : "Create task"}
+            </button>
+          </div>
         </div>
         <div className="flex flex-wrap gap-2">
           {(["table", "kanban", "calendar"] as const).map((v) => (
@@ -485,18 +605,21 @@ export default function ActionItemsPage() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <select
-                  className="rounded-md bg-surface-lift px-2 py-1 text-xs"
-                  value={task.status}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) => updateStatusMutation.mutate({ taskId: task._id, status: e.target.value })}
-                >
-                  {statuses.map((status) => (
-                    <option key={status} value={status}>
-                      {status}
-                    </option>
-                  ))}
-                </select>
+                {(() => {
+                  const action = getPrimaryAction(task.status);
+                  return action && isAllowedTaskTransition(task.status, action.status) ? (
+                    <button
+                      type="button"
+                      className="rounded-md border border-gold/30 bg-gold/10 px-2 py-1 text-xs text-gold-bright hover:bg-gold/15 disabled:opacity-50"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        updateStatusMutation.mutate({ taskId: task._id, status: action.status });
+                      }}
+                    >
+                      {action.label}
+                    </button>
+                  ) : null;
+                })()}
                 <button
                   type="button"
                   className="rounded-md border border-red-900 text-red-300 px-2 py-1 text-xs hover:bg-red-950/40 disabled:opacity-50"
@@ -529,20 +652,23 @@ export default function ActionItemsPage() {
                 >
                   <p className="text-sm">{task.title}</p>
                   <p className="text-[11px] text-muted mt-1">
-                    {task.priority} · {task.type}
+                    {task.priority} · {task.type} · {task.status}
                   </p>
-                  <select
-                    className="mt-2 w-full rounded-md bg-surface-lift px-2 py-1 text-[11px]"
-                    value={task.status}
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={(e) => updateStatusMutation.mutate({ taskId: task._id, status: e.target.value })}
-                  >
-                    {statuses.map((status) => (
-                      <option key={status} value={status}>
-                        {status}
-                      </option>
-                    ))}
-                  </select>
+                  {(() => {
+                    const action = getPrimaryAction(task.status);
+                    return action && isAllowedTaskTransition(task.status, action.status) ? (
+                      <button
+                        type="button"
+                        className="mt-2 w-full rounded-md border border-gold/25 bg-gold/10 py-1 text-[11px] text-gold-bright hover:bg-gold/15"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          updateStatusMutation.mutate({ taskId: task._id, status: action.status });
+                        }}
+                      >
+                        {action.label}
+                      </button>
+                    ) : null;
+                  })()}
                 </div>
               ))}
               {column.tasks.length === 0 && <p className="text-xs text-muted/80">No tasks</p>}
@@ -812,7 +938,18 @@ export default function ActionItemsPage() {
                 />
               ) : (
                 <>
-                  <p className="text-sm text-ink-secondary whitespace-pre-wrap mb-3">{d.description || "No description"}</p>
+                  <p className="text-sm text-ink-secondary whitespace-pre-wrap mb-3">
+                    {d.description ? (
+                      <>
+                        <span className="text-[10px] uppercase tracking-wide text-muted block mb-1">
+                          Action plan
+                        </span>
+                        {d.description}
+                      </>
+                    ) : (
+                      "No action plan documented yet."
+                    )}
+                  </p>
                   <dl className="grid grid-cols-2 gap-2 text-xs text-muted mb-4">
                     <div>
                       <dt className="text-muted/80">Due</dt>
@@ -853,8 +990,26 @@ export default function ActionItemsPage() {
                       <dd>{d.updatedAt ? new Date(d.updatedAt).toLocaleString() : "—"}</dd>
                     </div>
                   </dl>
+
+                  <TaskWorkflowPanel
+                    taskId={d._id}
+                    status={d.status}
+                    subtasks={d.subtasks}
+                    onChanged={() => {
+                      void qc.invalidateQueries({ queryKey: ["tasks", selectedTaskId] });
+                      void qc.invalidateQueries({ queryKey: ["tasks", "action-list"] });
+                      void qc.invalidateQueries({ queryKey: ["clients", "hub"] });
+                    }}
+                    onAddSubtask={async (title) => {
+                      await apiClient.post(`/tasks/${d._id}/subtasks`, { title });
+                    }}
+                    onToggleSubtask={async (subtaskId, done) => {
+                      await apiClient.patch(`/tasks/${d._id}/subtasks/${subtaskId}`, { done });
+                    }}
+                  />
+
                   <div className="border-t border-gold/20 pt-3 mb-3">
-                    <p className="text-xs uppercase text-muted mb-2">Comments</p>
+                    <p className="text-xs uppercase text-muted mb-2">Progress updates</p>
                     <div className="space-y-2 max-h-[120px] overflow-y-auto mb-2">
                       {(d.comments ?? []).length ? (
                         (d.comments ?? []).map((c) => (
@@ -872,7 +1027,7 @@ export default function ActionItemsPage() {
                     <div className="flex gap-2">
                       <input
                         className="flex-1 rounded-lg bg-surface-lift px-3 py-2 text-sm"
-                        placeholder="Add a comment"
+                        placeholder="Log progress — what we did, blockers, next steps"
                         value={commentDraft}
                         onChange={(e) => setCommentDraft(e.target.value)}
                       />
@@ -883,53 +1038,6 @@ export default function ActionItemsPage() {
                         onClick={() => addCommentMutation.mutate()}
                       >
                         Send
-                      </button>
-                    </div>
-                  </div>
-                  <div className="border-t border-gold/20 pt-3 mb-6">
-                    <p className="text-xs uppercase text-muted mb-2">Subtasks</p>
-                    <div className="space-y-1 mb-2">
-                      {(d.subtasks ?? []).map((st) => (
-                        <div key={st._id} className="flex items-center gap-2 text-sm">
-                          <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={st.done}
-                              onChange={(e) =>
-                                toggleSubtaskMutation.mutate({
-                                  subtaskId: st._id,
-                                  done: e.target.checked
-                                })
-                              }
-                            />
-                            <span className={st.done ? "line-through text-muted" : ""}>{st.title}</span>
-                          </label>
-                          <button
-                            type="button"
-                            className="shrink-0 text-[11px] text-red-400/90 underline-offset-2 hover:underline disabled:opacity-50"
-                            aria-label={`Remove subtask ${st.title}`}
-                            disabled={deleteSubtaskMutation.isPending}
-                            onClick={() => setSubtaskPendingDelete({ id: st._id, title: st.title })}
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex gap-2">
-                      <input
-                        className="flex-1 rounded-lg bg-surface-lift px-3 py-2 text-sm"
-                        placeholder="New subtask"
-                        value={subtaskDraft}
-                        onChange={(e) => setSubtaskDraft(e.target.value)}
-                      />
-                      <button
-                        type="button"
-                        disabled={!subtaskDraft.trim()}
-                        className="rounded-lg bg-surface-input px-3 py-2 text-sm text-white disabled:opacity-50"
-                        onClick={() => addSubtaskMutation.mutate()}
-                      >
-                        Add
                       </button>
                     </div>
                   </div>

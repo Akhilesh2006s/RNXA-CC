@@ -3,14 +3,14 @@
 import { useQuery } from "@tanstack/react-query";
 import type { LucideIcon } from "lucide-react";
 import {
+  AlertTriangle,
   BarChart3,
   Building2,
   CreditCard,
   Flame,
   Target,
   Users,
-  Wallet,
-  AlertTriangle
+  Wallet
 } from "lucide-react";
 import {
   Bar,
@@ -25,6 +25,9 @@ import {
   YAxis,
   Legend
 } from "recharts";
+import { PageShell } from "@/components/page-shell";
+import { LoadingSkeleton } from "@/components/ui/loading-skeleton";
+import { StatCard } from "@/components/ui/stat-card";
 import { apiClient } from "@/lib/api-client";
 import { formatInr } from "@/lib/format-inr";
 import { useIsDarkTheme } from "@/features/theme/use-is-dark-theme";
@@ -49,9 +52,7 @@ type Charts = {
   taskStatusBreakdown: { status: string; count: number }[];
 };
 
-const PIE_COLORS_DARK = ["#e8cf6a", "#c9a227", "#a68b2e", "#6b5f32", "#8b4513", "#f4e4a6"];
-
-const PIE_COLORS_LIGHT = ["#c9a56c", "#8f6641", "#5c3d27", "#a67c52", "#6b4423", "#d4b896"];
+const PIE_COLORS = ["#5aff3a", "#39ff14", "#2dd412", "#2e2973", "#8a94b8", "#121f4d"];
 
 function useKpis() {
   return useQuery({
@@ -79,23 +80,30 @@ export default function DashboardPage() {
   const isDark = useIsDarkTheme();
 
   const chartTooltipStyle = {
-    background: isDark ? "#0a0a0b" : "#fffcf7",
-    border: isDark ? "1px solid rgba(201,162,39,0.25)" : "1px solid rgba(92,61,39,0.22)",
-    color: isDark ? "#f5f2ea" : "#362a21"
+    background: isDark ? "#0c1538" : "#ffffff",
+    border: isDark ? "1px solid rgba(57,255,20,0.25)" : "1px solid rgba(46,41,115,0.15)",
+    borderRadius: "8px",
+    color: isDark ? "#eef1fb" : "#2e2973"
   } as const;
 
-  const gridStroke = isDark ? "rgba(201,162,39,0.12)" : "rgba(92,61,39,0.14)";
-  const axisStroke = isDark ? "#9d968a" : "#7a6656";
+  const gridStroke = isDark ? "rgba(57,255,20,0.1)" : "rgba(46,41,115,0.1)";
+  const axisStroke = isDark ? "#8a94b8" : "#5c6494";
 
   const k = kpiQuery.data;
 
-  const pieColors = isDark ? PIE_COLORS_DARK : PIE_COLORS_LIGHT;
-  const cards: Array<{ title: string; value: string; icon: LucideIcon; hint?: string }> = [
+  const cards: Array<{
+    title: string;
+    value: string;
+    icon: LucideIcon;
+    hint?: string;
+    accent?: "default" | "warning" | "success";
+  }> = [
     {
       title: "Monthly revenue",
       value: formatInr(k?.monthlyRevenue ?? 0),
       icon: Wallet,
-      hint: "Paid invoice flows this month"
+      hint: "Paid invoice flows this month",
+      accent: "success"
     },
     {
       title: "Burn (this month)",
@@ -119,7 +127,12 @@ export default function DashboardPage() {
     { title: "Clients", value: `${k?.convertedClients ?? 0}`, icon: Building2, hint: "CRM clients" },
     { title: "Team", value: `${k?.activeEmployees ?? 0}`, icon: Users, hint: "Employees on file" },
     { title: "Pending tasks", value: `${k?.pendingTasks ?? 0}`, icon: BarChart3 },
-    { title: "Overdue tasks", value: `${k?.overdueTasks ?? 0}`, icon: AlertTriangle }
+    {
+      title: "Overdue tasks",
+      value: `${k?.overdueTasks ?? 0}`,
+      icon: AlertTriangle,
+      accent: (k?.overdueTasks ?? 0) > 0 ? "warning" : "default"
+    }
   ];
 
   const comboBars = chartsQuery.data
@@ -130,74 +143,87 @@ export default function DashboardPage() {
       }))
     : [];
 
+  const taskBreakdown = chartsQuery.data?.taskStatusBreakdown ?? [];
+
   return (
-    <main className="space-y-4 p-3 pb-8 sm:space-y-5 sm:p-4 lg:space-y-6 lg:p-6 lg:pb-12">
-      <header className="space-y-1 border-b border-gold/20 pb-3 lg:pb-4">
-        <h1 className="text-xl font-semibold tracking-tight text-gold-bright sm:text-2xl">Executive Control Center</h1>
-        <p className="text-xs text-muted sm:text-sm">Dashboard KPIs plus chart data from Mongo aggregates.</p>
-      </header>
-      {kpiQuery.isLoading && <p className="text-sm text-muted">Loading metrics…</p>}
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {cards.map((card) => {
-          const Icon = card.icon;
-          return (
-            <div
-              key={card.title}
-              className="rounded-xl border border-gold/20 bg-surface-card p-4 shadow-[0_0_0_1px_rgba(92,61,39,0.08)] dark:shadow-[0_0_0_1px_rgba(201,162,39,0.06)]"
-            >
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-muted">{card.title}</p>
-                <Icon className="h-4 w-4 text-gold/70" />
-              </div>
-              <p className="text-2xl font-semibold mt-4 text-gold-bright">{card.value}</p>
-              {card.hint && <p className="text-[11px] text-muted/80 mt-1">{card.hint}</p>}
-            </div>
-          );
-        })}
-      </section>
+    <PageShell
+      title="Executive Control Center"
+      description="Real-time KPIs across revenue, pipeline, team, and operations."
+    >
+      {kpiQuery.isLoading ? (
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <LoadingSkeleton key={i} className="h-28" />
+          ))}
+        </section>
+      ) : (
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {cards.map((card) => (
+            <StatCard key={card.title} {...card} />
+          ))}
+        </section>
+      )}
 
-      <section className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <div className="flex h-[320px] flex-col rounded-xl border border-gold/20 bg-surface-card p-4">
-          <p className="mb-2 shrink-0 text-sm text-muted">Expense vs lead volume</p>
+      <section className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <div className="chart-card">
+          <p className="mb-4 text-sm font-medium text-ink-secondary">Expense vs lead volume</p>
           {chartsQuery.isLoading ? (
-            <p className="text-xs text-muted">Loading charts…</p>
+            <LoadingSkeleton className="h-[260px]" />
+          ) : comboBars.length === 0 ? (
+            <p className="flex h-[260px] items-center justify-center text-sm text-muted">No chart data yet</p>
           ) : (
-            <div className="min-h-[220px] w-full min-w-0 flex-1">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={comboBars}>
-                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                <XAxis dataKey="month" stroke={axisStroke} fontSize={11} />
-                <YAxis stroke={axisStroke} fontSize={11} />
-                <Tooltip contentStyle={chartTooltipStyle} />
-                <Legend />
-                <Bar dataKey="expenses" name="Expenses (₹)" fill="#c9a227" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="leads" name="Leads" fill="#e8cf6a" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <div className="h-[260px] w-full min-w-0">
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={comboBars} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
+                  <XAxis dataKey="month" stroke={axisStroke} fontSize={11} tickLine={false} />
+                  <YAxis stroke={axisStroke} fontSize={11} tickLine={false} axisLine={false} />
+                  <Tooltip contentStyle={chartTooltipStyle} />
+                  <Legend />
+                  <Bar dataKey="expenses" name="Expenses (₹)" fill="#39ff14" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="leads" name="Leads" fill="#2e2973" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           )}
         </div>
 
-        <div className="flex h-[320px] flex-col rounded-xl border border-gold/20 bg-surface-card p-4">
-          <p className="mb-2 shrink-0 text-sm text-muted">Tasks by status</p>
+        <div className="chart-card">
+          <p className="mb-4 text-sm font-medium text-ink-secondary">Tasks by status</p>
           {chartsQuery.isLoading ? (
-            <p className="text-xs text-muted">Loading charts…</p>
+            <LoadingSkeleton className="h-[260px]" />
+          ) : taskBreakdown.length === 0 ? (
+            <p className="flex h-[260px] items-center justify-center text-sm text-muted">No tasks yet</p>
           ) : (
-            <div className="min-h-[220px] w-full min-w-0 flex-1">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={chartsQuery.data?.taskStatusBreakdown ?? []} dataKey="count" nameKey="status" cx="50%" cy="50%" outerRadius={100} label>
-                  {(chartsQuery.data?.taskStatusBreakdown ?? []).map((_, idx) => (
-                    <Cell key={idx} fill={pieColors[idx % pieColors.length]} />
-                  ))}
-                </Pie>
-                <Tooltip contentStyle={chartTooltipStyle} />
-              </PieChart>
-            </ResponsiveContainer>
+            <div className="h-[260px] w-full min-w-0">
+              <ResponsiveContainer width="100%" height={260}>
+                <PieChart>
+                  <Pie
+                    data={taskBreakdown}
+                    dataKey="count"
+                    nameKey="status"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={90}
+                    innerRadius={45}
+                    paddingAngle={2}
+                    label={(props) => {
+                      const name = String(props.name ?? "");
+                      const value = props.value ?? 0;
+                      return `${name} (${value})`;
+                    }}
+                  >
+                    {taskBreakdown.map((_, idx) => (
+                      <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip contentStyle={chartTooltipStyle} />
+                </PieChart>
+              </ResponsiveContainer>
             </div>
           )}
         </div>
       </section>
-    </main>
+    </PageShell>
   );
 }
